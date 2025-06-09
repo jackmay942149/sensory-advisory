@@ -1,0 +1,169 @@
+package core
+
+import "base:runtime"
+import "core:log"
+import "core:slice"
+import "core:strings"
+import "vendor:glfw"
+import vk "vendor:vulkan"
+
+// Package Variables
+@(private)
+p_ctx: runtime.Context
+@(private)
+p_window: glfw.WindowHandle
+@(private)
+p_instance: vk.Instance
+@(private)
+p_debug_messenger: vk.DebugUtilsMessengerEXT
+@(private)
+p_validation_layers :: []cstring{"VK_LAYER_KHRONOS_validation"}
+
+
+init_window :: proc(width: i32, height: i32, title: string) {
+	p_ctx = context
+	assert(p_window == nil)
+	glfw.Init()
+	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
+	glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
+	p_window = glfw.CreateWindow(width, height, strings.clone_to_cstring(title), nil, nil)
+	assert(p_window != nil)
+	init_vulkan()
+	log.info("Initialised vulkan")
+}
+
+window_should_close :: proc() -> bool {
+	glfw.PollEvents()
+
+	if glfw.GetKey(p_window, glfw.KEY_ESCAPE) == glfw.PRESS {
+		return true
+	}
+	return bool(glfw.WindowShouldClose(p_window))
+}
+
+close_window :: proc() {
+	assert(p_window != nil)
+	assert(p_instance != nil)
+	vk.DestroyDebugUtilsMessengerEXT(p_instance, p_debug_messenger, nil)
+	vk.DestroyInstance(p_instance, nil)
+	p_instance = nil
+	glfw.DestroyWindow(p_window)
+	glfw.Terminate()
+	p_window = nil
+	log.info("Closed window")
+}
+
+@(private = "file")
+init_vulkan :: proc() {
+	create_instance()
+	vk.load_proc_addresses_instance(p_instance)
+	setup_debug_messenger()
+}
+
+@(private = "file")
+create_instance :: proc() {
+	// Load function pointers check odin example for this
+	vk.load_proc_addresses_global(rawptr(glfw.GetInstanceProcAddress))
+	assert(vk.CreateInstance != nil)
+
+	check_validation_layer()
+
+	app_info := vk.ApplicationInfo {
+		sType              = .APPLICATION_INFO,
+		pApplicationName   = "Hello Triangle",
+		applicationVersion = vk.MAKE_VERSION(1, 0, 0),
+		pEngineName        = "No Engine",
+		engineVersion      = vk.MAKE_VERSION(1, 0, 0),
+		apiVersion         = vk.API_VERSION_1_0,
+	}
+
+	extensions := get_required_extensions()
+	log.info("Vulkan extensions required:", extensions)
+
+	debug_info: vk.DebugUtilsMessengerCreateInfoEXT
+	info := vk.InstanceCreateInfo {
+		sType                   = .INSTANCE_CREATE_INFO,
+		pApplicationInfo        = &app_info,
+		enabledExtensionCount   = u32(len(extensions)),
+		ppEnabledExtensionNames = raw_data(extensions),
+		enabledLayerCount       = u32(len(p_validation_layers)),
+		ppEnabledLayerNames     = raw_data(p_validation_layers),
+	}
+
+	populate_debug_messenger_create_info(&debug_info)
+	info.pNext = &debug_info
+
+	assert(vk.CreateInstance(&info, nil, &p_instance) == vk.Result.SUCCESS)
+}
+
+@(private = "file")
+check_validation_layer :: proc() -> bool {
+	layer_count: u32
+	vk.EnumerateInstanceLayerProperties(&layer_count, nil)
+	available_layers := make([]vk.LayerProperties, layer_count) // TODO: allocator/delete
+	vk.EnumerateInstanceLayerProperties(&layer_count, raw_data(available_layers))
+	for layer_name in p_validation_layers {
+		layer_found: bool
+		for &layer_properties in available_layers { 	// Add & to make [256]byte addressable
+			available_layer := strings.clone_to_cstring(
+				strings.trim_null(transmute(string)(layer_properties.layerName[:])),
+			)
+			if layer_name == available_layer {
+				layer_found = true
+			}
+		}
+		assert(layer_found == true)
+	}
+	return true
+}
+
+@(private = "file")
+get_required_extensions :: proc() -> []cstring {
+	glfwExtensions := glfw.GetRequiredInstanceExtensions()
+	cstr: cstring = vk.EXT_DEBUG_UTILS_EXTENSION_NAME
+	glfwExt := [dynamic]cstring{}
+	append(&glfwExt, ..glfwExtensions[:])
+	append(&glfwExt, cstr)
+	return glfwExt[:]
+}
+
+@(private = "file")
+debug_callback :: proc "system" (
+	mSev: vk.DebugUtilsMessageSeverityFlagsEXT,
+	mType: vk.DebugUtilsMessageTypeFlagsEXT,
+	pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
+	pUserData: rawptr,
+) -> b32 {
+	context = p_ctx
+	switch {
+	case .VERBOSE in mSev:
+		log.debug("Vulkan Validation Layer Message:", pCallbackData.pMessage)
+	case .INFO in mSev:
+		log.info("Vulkan Validation Layer Message:", pCallbackData.pMessage)
+	case .WARNING in mSev:
+		log.warn("Vulkan Validation Layer Message:", pCallbackData.pMessage)
+	case .ERROR in mSev:
+		log.error("Vulkan Validation Layer Message:", pCallbackData.pMessage)
+	}
+	return false
+}
+
+@(private = "file")
+setup_debug_messenger :: proc() {
+	createInfo: vk.DebugUtilsMessengerCreateInfoEXT
+	populate_debug_messenger_create_info(&createInfo)
+	assert(
+		vk.CreateDebugUtilsMessengerEXT(p_instance, &createInfo, nil, &p_debug_messenger) ==
+		vk.Result.SUCCESS,
+	)
+}
+
+@(private = "file")
+populate_debug_messenger_create_info :: proc(ci: ^vk.DebugUtilsMessengerCreateInfoEXT) {
+	ci.sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT
+	ci.messageSeverity = vk.DebugUtilsMessageSeverityFlagsEXT{.VERBOSE, .WARNING, .ERROR}
+	ci.messageType = vk.DebugUtilsMessageTypeFlagsEXT{.GENERAL, .VALIDATION, .PERFORMANCE}
+	ci.pfnUserCallback = debug_callback
+	ci.pUserData = nil
+}
+
