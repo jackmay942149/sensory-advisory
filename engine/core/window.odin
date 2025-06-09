@@ -119,51 +119,51 @@ check_validation_layer :: proc() -> bool {
 
 @(private = "file")
 get_required_extensions :: proc() -> []cstring {
-	glfwExtensions := glfw.GetRequiredInstanceExtensions()
+	required_extensions := glfw.GetRequiredInstanceExtensions()
 	cstr: cstring = vk.EXT_DEBUG_UTILS_EXTENSION_NAME
-	glfwExt := [dynamic]cstring{}
-	append(&glfwExt, ..glfwExtensions[:])
-	append(&glfwExt, cstr)
-	return glfwExt[:]
+	updated_extensions := [dynamic]cstring{}
+	append(&updated_extensions, ..required_extensions[:])
+	append(&updated_extensions, cstr)
+	return updated_extensions[:]
 }
 
 @(private = "file")
 debug_callback :: proc "system" (
-	mSev: vk.DebugUtilsMessageSeverityFlagsEXT,
-	mType: vk.DebugUtilsMessageTypeFlagsEXT,
-	pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
-	pUserData: rawptr,
+	severity: vk.DebugUtilsMessageSeverityFlagsEXT,
+	type: vk.DebugUtilsMessageTypeFlagsEXT,
+	callback_data: ^vk.DebugUtilsMessengerCallbackDataEXT,
+	user_data: rawptr,
 ) -> b32 {
 	context = p_ctx
 	switch {
-	case .VERBOSE in mSev:
-		log.debug("Vulkan Validation Layer Message:", pCallbackData.pMessage)
-	case .INFO in mSev:
-		log.info("Vulkan Validation Layer Message:", pCallbackData.pMessage)
-	case .WARNING in mSev:
-		log.warn("Vulkan Validation Layer Message:", pCallbackData.pMessage)
-	case .ERROR in mSev:
-		log.error("Vulkan Validation Layer Message:", pCallbackData.pMessage)
+	case .VERBOSE in severity:
+		log.debug("Vulkan Validation Layer Message:", callback_data.pMessage)
+	case .INFO in severity:
+		log.info("Vulkan Validation Layer Message:", callback_data.pMessage)
+	case .WARNING in severity:
+		log.warn("Vulkan Validation Layer Message:", callback_data.pMessage)
+	case .ERROR in severity:
+		log.error("Vulkan Validation Layer Message:", callback_data.pMessage)
 	}
 	return false
 }
 
 @(private = "file")
 setup_debug_messenger :: proc() {
-	createInfo: vk.DebugUtilsMessengerCreateInfoEXT
-	populate_debug_messenger_create_info(&createInfo)
+	info: vk.DebugUtilsMessengerCreateInfoEXT
+	populate_debug_messenger_create_info(&info)
 	assert(
-		vk.CreateDebugUtilsMessengerEXT(p_instance, &createInfo, nil, &p_debug_messenger) ==
+		vk.CreateDebugUtilsMessengerEXT(p_instance, &info, nil, &p_debug_messenger) ==
 		vk.Result.SUCCESS,
 	)
 }
 
 @(private = "file")
-populate_debug_messenger_create_info :: proc(ci: ^vk.DebugUtilsMessengerCreateInfoEXT) {
-	ci.sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT
-	ci.messageSeverity = vk.DebugUtilsMessageSeverityFlagsEXT{.VERBOSE, .WARNING, .ERROR}
-	ci.messageType = vk.DebugUtilsMessageTypeFlagsEXT{.GENERAL, .VALIDATION, .PERFORMANCE}
-	ci.pfnUserCallback = debug_callback
-	ci.pUserData = nil
+populate_debug_messenger_create_info :: proc(info: ^vk.DebugUtilsMessengerCreateInfoEXT) {
+	info.sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT
+	info.messageSeverity = vk.DebugUtilsMessageSeverityFlagsEXT{.VERBOSE, .WARNING, .ERROR}
+	info.messageType = vk.DebugUtilsMessageTypeFlagsEXT{.GENERAL, .VALIDATION, .PERFORMANCE}
+	info.pfnUserCallback = debug_callback
+	info.pUserData = nil
 }
 
