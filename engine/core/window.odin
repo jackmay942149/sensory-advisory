@@ -19,7 +19,13 @@ p_debug_messenger: vk.DebugUtilsMessengerEXT
 @(private)
 p_validation_layers :: []cstring{"VK_LAYER_KHRONOS_validation"}
 @(private)
-p_device: vk.PhysicalDevice
+p_physical_device: vk.PhysicalDevice
+@(private)
+p_logical_device: vk.Device
+@(private)
+p_graphics_queue: vk.Queue
+@(private)
+p_surface: vk.SurfaceKHR
 
 init_window :: proc(width: i32, height: i32, title: string) {
 	p_ctx = context
@@ -45,9 +51,16 @@ window_should_close :: proc() -> bool {
 close_window :: proc() {
 	assert(p_window != nil)
 	assert(p_instance != nil)
+	assert(p_logical_device != nil)
+
+	vk.DestroyDevice(p_logical_device, nil)
+	p_logical_device = nil
+
 	vk.DestroyDebugUtilsMessengerEXT(p_instance, p_debug_messenger, nil)
+
 	vk.DestroyInstance(p_instance, nil)
 	p_instance = nil
+
 	glfw.DestroyWindow(p_window)
 	glfw.Terminate()
 	p_window = nil
@@ -60,6 +73,7 @@ init_vulkan :: proc() {
 	vk.load_proc_addresses_instance(p_instance)
 	setup_debug_messenger()
 	pick_physical_device()
+	create_logical_device()
 }
 
 @(private = "file")
@@ -102,8 +116,7 @@ create_instance :: proc() {
 check_validation_layer :: proc() -> bool {
 	layer_count: u32
 	vk.EnumerateInstanceLayerProperties(&layer_count, nil)
-	available_layers := make([]vk.LayerProperties, layer_count, context.temp_allocator)
-	defer free_all(context.temp_allocator)
+	available_layers := make([]vk.LayerProperties, layer_count) // TODO: allocator/delete
 	vk.EnumerateInstanceLayerProperties(&layer_count, raw_data(available_layers))
 	for layer_name in p_validation_layers {
 		layer_found: bool
@@ -186,13 +199,12 @@ pick_physical_device :: proc() {
 	for d in devices {
 		if is_device_suitable(d) {
 			log.info("Using device:", d)
-			p_device = d
+			p_physical_device = d
 			break
 		}
 	}
 }
 
-@(private = "file")
 QueueFamilyIndicies :: struct {
 	is_complete:     bool,
 	graphics_family: u32,
@@ -230,5 +242,33 @@ find_queue_families :: proc(device: vk.PhysicalDevice) -> QueueFamilyIndicies {
 		}
 	}
 	return indicies
+}
+
+@(private = "file")
+create_logical_device :: proc() {
+	indicies := find_queue_families(p_physical_device)
+	priority: f32 = 1.0
+	q_info := vk.DeviceQueueCreateInfo {
+		sType            = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
+		queueFamilyIndex = indicies.graphics_family,
+		queueCount       = 1,
+		pQueuePriorities = &priority,
+	}
+
+	features: vk.PhysicalDeviceFeatures
+	info := vk.DeviceCreateInfo {
+		sType                 = vk.StructureType.DEVICE_CREATE_INFO,
+		pQueueCreateInfos     = &q_info,
+		queueCreateInfoCount  = 1,
+		pEnabledFeatures      = &features,
+		enabledExtensionCount = 0,
+	}
+
+	if (vk.CreateDevice(p_physical_device, &info, nil, &p_logical_device) != vk.Result.SUCCESS) {
+		log.fatal("Failed to create logical device")
+	}
+
+	// Get handle to graphics queue
+	vk.GetDeviceQueue(p_logical_device, indicies.graphics_family, 0, &p_graphics_queue)
 }
 
