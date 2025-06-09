@@ -18,7 +18,8 @@ p_instance: vk.Instance
 p_debug_messenger: vk.DebugUtilsMessengerEXT
 @(private)
 p_validation_layers :: []cstring{"VK_LAYER_KHRONOS_validation"}
-
+@(private)
+p_device: vk.PhysicalDevice
 
 init_window :: proc(width: i32, height: i32, title: string) {
 	p_ctx = context
@@ -58,6 +59,7 @@ init_vulkan :: proc() {
 	create_instance()
 	vk.load_proc_addresses_instance(p_instance)
 	setup_debug_messenger()
+	pick_physical_device()
 }
 
 @(private = "file")
@@ -100,7 +102,8 @@ create_instance :: proc() {
 check_validation_layer :: proc() -> bool {
 	layer_count: u32
 	vk.EnumerateInstanceLayerProperties(&layer_count, nil)
-	available_layers := make([]vk.LayerProperties, layer_count) // TODO: allocator/delete
+	available_layers := make([]vk.LayerProperties, layer_count, context.temp_allocator)
+	defer free_all(context.temp_allocator)
 	vk.EnumerateInstanceLayerProperties(&layer_count, raw_data(available_layers))
 	for layer_name in p_validation_layers {
 		layer_found: bool
@@ -165,5 +168,67 @@ populate_debug_messenger_create_info :: proc(info: ^vk.DebugUtilsMessengerCreate
 	info.messageType = vk.DebugUtilsMessageTypeFlagsEXT{.GENERAL, .VALIDATION, .PERFORMANCE}
 	info.pfnUserCallback = debug_callback
 	info.pUserData = nil
+}
+
+@(private = "file")
+pick_physical_device :: proc() {
+	// Get all physical devices
+	count: u32
+	vk.EnumeratePhysicalDevices(p_instance, &count, nil)
+	if count == 0 {
+		log.fatal("No vulkan physical devices found")
+	}
+
+	// Check for first suitable device
+	devices := make([]vk.PhysicalDevice, count, context.temp_allocator)
+	defer free_all(context.temp_allocator)
+	vk.EnumeratePhysicalDevices(p_instance, &count, raw_data(devices))
+	for d in devices {
+		if is_device_suitable(d) {
+			log.info("Using device:", d)
+			p_device = d
+			break
+		}
+	}
+}
+
+@(private = "file")
+QueueFamilyIndicies :: struct {
+	is_complete:     bool,
+	graphics_family: u32,
+}
+
+@(private = "file")
+is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
+	properties: vk.PhysicalDeviceProperties
+	vk.GetPhysicalDeviceProperties(device, &properties)
+	features: vk.PhysicalDeviceFeatures
+	vk.GetPhysicalDeviceFeatures(device, &features)
+
+	indicies := find_queue_families(device)
+
+	return indicies.is_complete
+	// TODO: Device Selection To Favour Dedicated GPU
+	// TODO: Look into multi viewport rendering feature
+}
+
+@(private = "file")
+find_queue_families :: proc(device: vk.PhysicalDevice) -> QueueFamilyIndicies {
+	indicies: QueueFamilyIndicies
+	count: u32
+	vk.GetPhysicalDeviceQueueFamilyProperties(device, &count, nil)
+	families := make([]vk.QueueFamilyProperties, count, context.temp_allocator)
+	defer free_all(context.allocator)
+	vk.GetPhysicalDeviceQueueFamilyProperties(device, &count, raw_data(families))
+
+	for q, i in families {
+		if vk.QueueFlag.GRAPHICS in q.queueFlags {
+			indicies.graphics_family = u32(i)
+			indicies.is_complete = true
+			log.info("Found suitable device", device, "with queue flags:", q.queueFlags)
+			break
+		}
+	}
+	return indicies
 }
 

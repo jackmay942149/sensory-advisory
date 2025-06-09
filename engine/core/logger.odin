@@ -20,7 +20,8 @@ init_logger :: proc(ctx: ^runtime.Context, file: string) {
 	f_info_log = log.create_console_logger(.Info, info_opt, "", context.allocator)
 	context.logger = f_info_log
 
-	handle, err := os.open(file, os.O_CREATE | os.O_WRONLY)
+	os.remove(file)
+	handle, err := os.open(file, os.O_CREATE | os.O_WRONLY) // TODO: Bug here i think i need to clear the file contents
 	if err != nil {
 		log.fatal("Failed to open file logger")
 	}
