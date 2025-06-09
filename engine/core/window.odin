@@ -29,7 +29,7 @@ init_window :: proc(width: i32, height: i32, title: string) {
 	p_window = glfw.CreateWindow(width, height, strings.clone_to_cstring(title), nil, nil)
 	assert(p_window != nil)
 	init_vulkan()
-	log.info("Initialised vulkan")
+	log.info("Initialised window")
 }
 
 window_should_close :: proc() -> bool {
