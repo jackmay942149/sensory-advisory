@@ -29,13 +29,13 @@ p_surface: vk.SurfaceKHR
 @(private)
 p_presentation_queue: vk.Queue
 
-init_window :: proc(width: i32, height: i32, title: string) {
+init_window :: proc(width: i32, height: i32, title: cstring) {
 	p_ctx = context
 	assert(p_window == nil)
 	glfw.Init()
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 	glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
-	p_window = glfw.CreateWindow(width, height, strings.clone_to_cstring(title), nil, nil)
+	p_window = glfw.CreateWindow(width, height, title, nil, nil)
 	assert(p_window != nil)
 	init_vulkan()
 	log.info("Initialised window")
@@ -98,7 +98,9 @@ create_instance :: proc() {
 		apiVersion         = vk.API_VERSION_1_0,
 	}
 
-	extensions := get_required_extensions()
+	extensions: [dynamic]cstring
+	defer delete(extensions)
+	get_required_extensions(&extensions)
 	log.info("Vulkan extensions required:", extensions)
 
 	debug_info: vk.DebugUtilsMessengerCreateInfoEXT
@@ -128,24 +130,25 @@ check_validation_layer :: proc() -> bool {
 		for &layer_properties in available_layers { 	// Add & to make [256]byte addressable
 			available_layer := strings.clone_to_cstring(
 				strings.trim_null(transmute(string)(layer_properties.layerName[:])),
+				context.allocator,
 			)
 			if layer_name == available_layer {
 				layer_found = true
 			}
+			delete(available_layer)
 		}
 		assert(layer_found == true)
 	}
+	delete(available_layers)
 	return true
 }
 
 @(private = "file")
-get_required_extensions :: proc() -> []cstring {
+get_required_extensions :: proc(extensions: ^[dynamic]cstring) {
 	required_extensions := glfw.GetRequiredInstanceExtensions()
 	cstr: cstring = vk.EXT_DEBUG_UTILS_EXTENSION_NAME
-	updated_extensions := [dynamic]cstring{}
-	append(&updated_extensions, ..required_extensions[:])
-	append(&updated_extensions, cstr)
-	return updated_extensions[:]
+	append(extensions, ..required_extensions[:])
+	append(extensions, cstr)
 }
 
 @(private = "file")
@@ -282,10 +285,12 @@ create_logical_device :: proc() {
 	}
 
 	q_set: map[u32]vk.DeviceQueueCreateInfo
+	defer delete(q_set)
 	map_insert(&q_set, indicies.graphics_family, q_info_graphics)
 	map_insert(&q_set, indicies.presentation_family, q_info_presentation)
 
 	q_info: [dynamic]vk.DeviceQueueCreateInfo
+	defer delete(q_info)
 	for _, v in q_set {
 		append(&q_info, v)
 	}

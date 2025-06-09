@@ -40,9 +40,3 @@ init_logger :: proc(ctx: ^runtime.Context, file: string) {
 	log.info("Created logger")
 }
 
-close_logger :: proc() {
-	log.destroy_multi_logger(f_logger)
-	log.destroy_console_logger(f_info_log)
-	log.destroy_file_logger(f_debug_log)
-}
-
