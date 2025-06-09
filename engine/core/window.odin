@@ -26,6 +26,8 @@ p_logical_device: vk.Device
 p_graphics_queue: vk.Queue
 @(private)
 p_surface: vk.SurfaceKHR
+@(private)
+p_presentation_queue: vk.Queue
 
 init_window :: proc(width: i32, height: i32, title: string) {
 	p_ctx = context
@@ -53,6 +55,8 @@ close_window :: proc() {
 	assert(p_instance != nil)
 	assert(p_logical_device != nil)
 
+	vk.DestroySurfaceKHR(p_instance, p_surface, nil)
+
 	vk.DestroyDevice(p_logical_device, nil)
 	p_logical_device = nil
 
@@ -72,6 +76,7 @@ init_vulkan :: proc() {
 	create_instance()
 	vk.load_proc_addresses_instance(p_instance)
 	setup_debug_messenger()
+	create_surface()
 	pick_physical_device()
 	create_logical_device()
 }
@@ -206,8 +211,15 @@ pick_physical_device :: proc() {
 }
 
 QueueFamilyIndicies :: struct {
-	is_complete:     bool,
-	graphics_family: u32,
+	has_graphics:        bool,
+	graphics_family:     u32,
+	has_presentation:    bool,
+	presentation_family: u32,
+}
+
+@(private = "file")
+is_queue_complete :: proc(using queue: QueueFamilyIndicies) -> bool {
+	return has_graphics && has_presentation
 }
 
 @(private = "file")
@@ -219,14 +231,13 @@ is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
 
 	indicies := find_queue_families(device)
 
-	return indicies.is_complete
+	return is_queue_complete(indicies)
 	// TODO: Device Selection To Favour Dedicated GPU
 	// TODO: Look into multi viewport rendering feature
 }
 
 @(private = "file")
-find_queue_families :: proc(device: vk.PhysicalDevice) -> QueueFamilyIndicies {
-	indicies: QueueFamilyIndicies
+find_queue_families :: proc(device: vk.PhysicalDevice) -> (indicies: QueueFamilyIndicies) {
 	count: u32
 	vk.GetPhysicalDeviceQueueFamilyProperties(device, &count, nil)
 	families := make([]vk.QueueFamilyProperties, count, context.temp_allocator)
@@ -235,8 +246,15 @@ find_queue_families :: proc(device: vk.PhysicalDevice) -> QueueFamilyIndicies {
 
 	for q, i in families {
 		if vk.QueueFlag.GRAPHICS in q.queueFlags {
+			presentation_support: b32
+			vk.GetPhysicalDeviceSurfaceSupportKHR(device, u32(i), p_surface, &presentation_support)
+			if (presentation_support == false) {
+				continue
+			}
+			indicies.presentation_family = u32(i)
+			indicies.has_presentation = true
 			indicies.graphics_family = u32(i)
-			indicies.is_complete = true
+			indicies.has_graphics = true
 			log.info("Found suitable device", device, "with queue flags:", q.queueFlags)
 			break
 		}
@@ -248,18 +266,35 @@ find_queue_families :: proc(device: vk.PhysicalDevice) -> QueueFamilyIndicies {
 create_logical_device :: proc() {
 	indicies := find_queue_families(p_physical_device)
 	priority: f32 = 1.0
-	q_info := vk.DeviceQueueCreateInfo {
+
+	q_info_graphics := vk.DeviceQueueCreateInfo {
 		sType            = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
 		queueFamilyIndex = indicies.graphics_family,
 		queueCount       = 1,
 		pQueuePriorities = &priority,
 	}
 
+	q_info_presentation := vk.DeviceQueueCreateInfo {
+		sType            = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
+		queueFamilyIndex = indicies.presentation_family,
+		queueCount       = 1,
+		pQueuePriorities = &priority,
+	}
+
+	q_set: map[u32]vk.DeviceQueueCreateInfo
+	map_insert(&q_set, indicies.graphics_family, q_info_graphics)
+	map_insert(&q_set, indicies.presentation_family, q_info_presentation)
+
+	q_info: [dynamic]vk.DeviceQueueCreateInfo
+	for _, v in q_set {
+		append(&q_info, v)
+	}
+
 	features: vk.PhysicalDeviceFeatures
 	info := vk.DeviceCreateInfo {
 		sType                 = vk.StructureType.DEVICE_CREATE_INFO,
-		pQueueCreateInfos     = &q_info,
-		queueCreateInfoCount  = 1,
+		pQueueCreateInfos     = raw_data(q_info[:]),
+		queueCreateInfoCount  = u32(len(q_info)),
 		pEnabledFeatures      = &features,
 		enabledExtensionCount = 0,
 	}
@@ -270,5 +305,16 @@ create_logical_device :: proc() {
 
 	// Get handle to graphics queue
 	vk.GetDeviceQueue(p_logical_device, indicies.graphics_family, 0, &p_graphics_queue)
+
+	// Get handle to presentation queue
+	vk.GetDeviceQueue(p_logical_device, indicies.presentation_family, 0, &p_presentation_queue)
+	assert(p_presentation_queue != nil)
+}
+
+@(private = "file")
+create_surface :: proc() {
+	if glfw.CreateWindowSurface(p_instance, p_window, nil, &p_surface) != vk.Result.SUCCESS {
+		log.fatal("Failed to create window surface")
+	}
 }
 
