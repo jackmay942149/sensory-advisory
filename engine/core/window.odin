@@ -244,7 +244,14 @@ is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
 
 	indicies := find_queue_families(device)
 	extensions_supported := check_device_extension_support(device)
-	return is_queue_complete(indicies) && extensions_supported
+
+	swapchain_adequate: bool
+	if extensions_supported {
+		swapchain_support := query_swapchain_support(device)
+		swapchain_adequate = len(swapchain_support.formats) > 0
+		swapchain_adequate = swapchain_adequate && len(swapchain_support.present_modes) > 0
+	}
+	return is_queue_complete(indicies) && extensions_supported && swapchain_adequate
 	// TODO: Device Selection To Favour Dedicated GPU
 	// TODO: Look into multi viewport rendering feature
 }
@@ -305,11 +312,12 @@ create_logical_device :: proc() {
 
 	features: vk.PhysicalDeviceFeatures
 	info := vk.DeviceCreateInfo {
-		sType                 = vk.StructureType.DEVICE_CREATE_INFO,
-		pQueueCreateInfos     = raw_data(q_info[:]),
-		queueCreateInfoCount  = u32(len(q_info)),
-		pEnabledFeatures      = &features,
-		enabledExtensionCount = 0,
+		sType                   = vk.StructureType.DEVICE_CREATE_INFO,
+		pQueueCreateInfos       = raw_data(q_info[:]),
+		queueCreateInfoCount    = u32(len(q_info)),
+		pEnabledFeatures        = &features,
+		enabledExtensionCount   = u32(len(p_device_extensions)),
+		ppEnabledExtensionNames = raw_data(p_device_extensions),
 	}
 
 	if (vk.CreateDevice(p_physical_device, &info, nil, &p_logical_device) != vk.Result.SUCCESS) {
@@ -355,5 +363,35 @@ check_device_extension_support :: proc(device: vk.PhysicalDevice) -> bool {
 		return false
 	}
 	return true
+}
+
+SwapchainSupportDetails :: struct {
+	capabilities:  vk.SurfaceCapabilitiesKHR,
+	formats:       [dynamic]vk.SurfaceFormatKHR,
+	present_modes: [dynamic]vk.PresentModeKHR,
+}
+
+query_swapchain_support :: proc(device: vk.PhysicalDevice) -> (details: SwapchainSupportDetails) {
+	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device, p_surface, &details.capabilities)
+
+	count: u32
+	vk.GetPhysicalDeviceSurfaceFormatsKHR(device, p_surface, &count, nil)
+	if count != 0 {
+		details.formats = make([dynamic]vk.SurfaceFormatKHR, count, context.allocator)
+		vk.GetPhysicalDeviceSurfaceFormatsKHR(device, p_surface, &count, raw_data(details.formats))
+	}
+
+	count = 0
+	vk.GetPhysicalDeviceSurfacePresentModesKHR(device, p_surface, &count, nil)
+	if count != 0 {
+		details.present_modes = make([dynamic]vk.PresentModeKHR, count, context.allocator)
+		vk.GetPhysicalDeviceSurfacePresentModesKHR(
+			device,
+			p_surface,
+			&count,
+			raw_data(details.present_modes),
+		)
+	}
+	return details
 }
 
