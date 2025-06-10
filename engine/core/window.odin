@@ -17,7 +17,9 @@ p_instance: vk.Instance
 @(private)
 p_debug_messenger: vk.DebugUtilsMessengerEXT
 @(private)
-p_validation_layers :: []cstring{"VK_LAYER_KHRONOS_validation"}
+p_req_validation_layers :: []cstring{"VK_LAYER_KHRONOS_validation"}
+@(private)
+p_avail_validation_layers: [dynamic]string
 @(private)
 p_physical_device: vk.PhysicalDevice
 @(private)
@@ -29,7 +31,9 @@ p_surface: vk.SurfaceKHR
 @(private)
 p_presentation_queue: vk.Queue
 @(private)
-p_device_extensions :: []string{"VK_KHR_swapchain"}
+p_device_extensions :: []cstring{"VK_KHR_swapchain"}
+@(private)
+p_avail_extensions: [dynamic]string
 
 init_window :: proc(width: i32, height: i32, title: cstring) {
 	p_ctx = context
@@ -56,6 +60,9 @@ close_window :: proc() {
 	assert(p_window != nil)
 	assert(p_instance != nil)
 	assert(p_logical_device != nil)
+
+	delete(p_avail_extensions)
+	delete(p_avail_validation_layers)
 
 	vk.DestroySurfaceKHR(p_instance, p_surface, nil)
 
@@ -111,8 +118,8 @@ create_instance :: proc() {
 		pApplicationInfo        = &app_info,
 		enabledExtensionCount   = u32(len(extensions)),
 		ppEnabledExtensionNames = raw_data(extensions),
-		enabledLayerCount       = u32(len(p_validation_layers)),
-		ppEnabledLayerNames     = raw_data(p_validation_layers),
+		enabledLayerCount       = u32(len(p_req_validation_layers)),
+		ppEnabledLayerNames     = raw_data(p_req_validation_layers),
 	}
 
 	populate_debug_messenger_create_info(&debug_info)
@@ -125,23 +132,23 @@ create_instance :: proc() {
 check_validation_layer :: proc() -> bool {
 	layer_count: u32
 	vk.EnumerateInstanceLayerProperties(&layer_count, nil)
-	available_layers := make([]vk.LayerProperties, layer_count) // TODO: allocator/delete
+	available_layers := make([]vk.LayerProperties, layer_count)
+	defer delete(available_layers)
 	vk.EnumerateInstanceLayerProperties(&layer_count, raw_data(available_layers))
-	for layer_name in p_validation_layers {
-		layer_found: bool
-		for &layer_properties in available_layers { 	// Add & to make [256]byte addressable
-			available_layer := strings.clone_to_cstring(
-				strings.trim_null(transmute(string)(layer_properties.layerName[:])),
-				context.allocator,
-			)
-			if layer_name == available_layer {
-				layer_found = true
-			}
-			delete(available_layer)
-		}
-		assert(layer_found == true)
+
+	for &layer in available_layers {
+		l := strings.trim_null(string(layer.layerName[:]))
+		append(&p_avail_validation_layers, l)
+		log.info("Available validation layer:", l)
 	}
-	delete(available_layers)
+
+	for layer in p_req_validation_layers {
+		if slice.contains(p_avail_validation_layers[:], string(layer)) {
+			continue
+		}
+		log.error(layer, "validation layer required and not found")
+		return false
+	}
 	return true
 }
 
@@ -334,21 +341,19 @@ check_device_extension_support :: proc(device: vk.PhysicalDevice) -> bool {
 	defer delete(available_ext)
 	vk.EnumerateDeviceExtensionProperties(device, nil, &count, raw_data(available_ext))
 
-	found: bool
-	for ext in p_device_extensions {
-		for &avail in available_ext {
-			if strings.trim_null(string(avail.extensionName[:])) == ext {
-				found = true
-				break
-			}
-		}
-		if (!found) {
-			log.error(ext, "extension required and not found")
-			return false
-		}
-		found = false
+	for &ext in available_ext {
+		e := strings.trim_null(string(ext.extensionName[:]))
+		append(&p_avail_extensions, e)
+		log.info(e)
 	}
 
+	for ext in p_device_extensions {
+		if slice.contains(p_avail_extensions[:], string(ext)) {
+			continue
+		}
+		log.error(ext, "extension required and not found")
+		return false
+	}
 	return true
 }
 
