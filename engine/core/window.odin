@@ -28,6 +28,8 @@ p_graphics_queue: vk.Queue
 p_surface: vk.SurfaceKHR
 @(private)
 p_presentation_queue: vk.Queue
+@(private)
+p_device_extensions :: []string{"VK_KHR_swapchain"}
 
 init_window :: proc(width: i32, height: i32, title: cstring) {
 	p_ctx = context
@@ -202,8 +204,8 @@ pick_physical_device :: proc() {
 	log.info(count, "devices found")
 
 	// Check for first suitable device
-	devices := make([]vk.PhysicalDevice, count, context.temp_allocator)
-	defer free_all(context.temp_allocator)
+	devices := make([]vk.PhysicalDevice, count, context.allocator)
+	defer delete(devices)
 	vk.EnumeratePhysicalDevices(p_instance, &count, raw_data(devices))
 	for d in devices {
 		if is_device_suitable(d) {
@@ -234,8 +236,8 @@ is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
 	vk.GetPhysicalDeviceFeatures(device, &features)
 
 	indicies := find_queue_families(device)
-
-	return is_queue_complete(indicies)
+	extensions_supported := check_device_extension_support(device)
+	return is_queue_complete(indicies) && extensions_supported
 	// TODO: Device Selection To Favour Dedicated GPU
 	// TODO: Look into multi viewport rendering feature
 }
@@ -244,8 +246,8 @@ is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
 find_queue_families :: proc(device: vk.PhysicalDevice) -> (indicies: QueueFamilyIndicies) {
 	count: u32
 	vk.GetPhysicalDeviceQueueFamilyProperties(device, &count, nil)
-	families := make([]vk.QueueFamilyProperties, count, context.temp_allocator)
-	defer free_all(context.allocator)
+	families := make([]vk.QueueFamilyProperties, count, context.allocator)
+	defer delete(families)
 	vk.GetPhysicalDeviceQueueFamilyProperties(device, &count, raw_data(families))
 
 	for q, i in families {
@@ -320,5 +322,33 @@ create_surface :: proc() {
 	if glfw.CreateWindowSurface(p_instance, p_window, nil, &p_surface) != vk.Result.SUCCESS {
 		log.fatal("Failed to create window surface")
 	}
+}
+
+@(private = "file")
+check_device_extension_support :: proc(device: vk.PhysicalDevice) -> bool {
+	// TODO: Have the available extensions cached and logged, also do this for check_validation_layer
+	count: u32
+	vk.EnumerateDeviceExtensionProperties(device, nil, &count, nil)
+
+	available_ext := make([]vk.ExtensionProperties, count, context.allocator)
+	defer delete(available_ext)
+	vk.EnumerateDeviceExtensionProperties(device, nil, &count, raw_data(available_ext))
+
+	found: bool
+	for ext in p_device_extensions {
+		for &avail in available_ext {
+			if strings.trim_null(string(avail.extensionName[:])) == ext {
+				found = true
+				break
+			}
+		}
+		if (!found) {
+			log.error(ext, "extension required and not found")
+			return false
+		}
+		found = false
+	}
+
+	return true
 }
 
