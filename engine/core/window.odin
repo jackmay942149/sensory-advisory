@@ -199,6 +199,7 @@ pick_physical_device :: proc() {
 	if count == 0 {
 		log.fatal("No vulkan physical devices found")
 	}
+	log.info(count, "devices found")
 
 	// Check for first suitable device
 	devices := make([]vk.PhysicalDevice, count, context.temp_allocator)
@@ -214,14 +215,14 @@ pick_physical_device :: proc() {
 }
 
 QueueFamilyIndicies :: struct {
-	has_graphics:        bool,
-	graphics_family:     u32,
-	has_presentation:    bool,
-	presentation_family: u32,
+	graphics_family:     Maybe(u32),
+	presentation_family: Maybe(u32),
 }
 
 @(private = "file")
 is_queue_complete :: proc(using queue: QueueFamilyIndicies) -> bool {
+	_, has_graphics := graphics_family.?
+	_, has_presentation := presentation_family.?
 	return has_graphics && has_presentation
 }
 
@@ -255,9 +256,7 @@ find_queue_families :: proc(device: vk.PhysicalDevice) -> (indicies: QueueFamily
 				continue
 			}
 			indicies.presentation_family = u32(i)
-			indicies.has_presentation = true
 			indicies.graphics_family = u32(i)
-			indicies.has_graphics = true
 			log.info("Found suitable device", device, "with queue flags:", q.queueFlags)
 			break
 		}
@@ -267,27 +266,27 @@ find_queue_families :: proc(device: vk.PhysicalDevice) -> (indicies: QueueFamily
 
 @(private = "file")
 create_logical_device :: proc() {
-	indicies := find_queue_families(p_physical_device)
+	indicies := find_queue_families(p_physical_device) //  Todo: Possible optimisation here to cache this from an earlier call
 	priority: f32 = 1.0
 
 	q_info_graphics := vk.DeviceQueueCreateInfo {
 		sType            = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
-		queueFamilyIndex = indicies.graphics_family,
+		queueFamilyIndex = indicies.graphics_family.?,
 		queueCount       = 1,
 		pQueuePriorities = &priority,
 	}
 
 	q_info_presentation := vk.DeviceQueueCreateInfo {
 		sType            = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
-		queueFamilyIndex = indicies.presentation_family,
+		queueFamilyIndex = indicies.presentation_family.?,
 		queueCount       = 1,
 		pQueuePriorities = &priority,
 	}
 
 	q_set: map[u32]vk.DeviceQueueCreateInfo
 	defer delete(q_set)
-	map_insert(&q_set, indicies.graphics_family, q_info_graphics)
-	map_insert(&q_set, indicies.presentation_family, q_info_presentation)
+	map_insert(&q_set, indicies.graphics_family.?, q_info_graphics)
+	map_insert(&q_set, indicies.presentation_family.?, q_info_presentation)
 
 	q_info: [dynamic]vk.DeviceQueueCreateInfo
 	defer delete(q_info)
@@ -309,10 +308,10 @@ create_logical_device :: proc() {
 	}
 
 	// Get handle to graphics queue
-	vk.GetDeviceQueue(p_logical_device, indicies.graphics_family, 0, &p_graphics_queue)
+	vk.GetDeviceQueue(p_logical_device, indicies.graphics_family.?, 0, &p_graphics_queue)
 
 	// Get handle to presentation queue
-	vk.GetDeviceQueue(p_logical_device, indicies.presentation_family, 0, &p_presentation_queue)
+	vk.GetDeviceQueue(p_logical_device, indicies.presentation_family.?, 0, &p_presentation_queue)
 	assert(p_presentation_queue != nil)
 }
 
