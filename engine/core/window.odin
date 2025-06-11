@@ -250,6 +250,8 @@ is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
 		swapchain_support := query_swapchain_support(device)
 		swapchain_adequate = len(swapchain_support.formats) > 0
 		swapchain_adequate = swapchain_adequate && len(swapchain_support.present_modes) > 0
+		delete(swapchain_support.formats)
+		delete(swapchain_support.present_modes)
 	}
 	return is_queue_complete(indicies) && extensions_supported && swapchain_adequate
 	// TODO: Device Selection To Favour Dedicated GPU
@@ -393,5 +395,44 @@ query_swapchain_support :: proc(device: vk.PhysicalDevice) -> (details: Swapchai
 		)
 	}
 	return details
+}
+
+choose_swapchain_surface_format :: proc(
+	avail_formats: ^[dynamic]vk.SurfaceFormatKHR,
+) -> vk.SurfaceFormatKHR {
+	for format in avail_formats {
+		if format.format == vk.Format.R8G8B8A8_SRGB &&
+		   format.colorSpace == vk.ColorSpaceKHR.SRGB_NONLINEAR {
+			return format
+		}
+	}
+	assert(len(avail_formats) > 0)
+	log.warn("Swapchain surface format is non standard")
+	return avail_formats[0] // TODO: improve non standard format picking
+}
+
+choose_swapchain_present_mode :: proc(
+	avail_modes: ^[dynamic]vk.PresentModeKHR,
+) -> vk.PresentModeKHR {
+	for mode in avail_modes {
+		if mode == vk.PresentModeKHR.MAILBOX {
+			return mode
+		}
+	}
+
+	return vk.PresentModeKHR.FIFO
+}
+
+choose_swapchain_extent :: proc(using capabilities: ^vk.SurfaceCapabilitiesKHR) -> vk.Extent2D {
+	if (currentExtent.width != max(u32)) {
+		return currentExtent // Trick to query if window manager allows us to change extent
+	}
+
+	width, height := glfw.GetFramebufferSize(p_window)
+	actual_extent := vk.Extent2D {
+		clamp(u32(width), minImageExtent.width, maxImageExtent.width),
+		clamp(u32(height), maxImageExtent.height, maxImageExtent.height),
+	}
+	return actual_extent
 }
 
