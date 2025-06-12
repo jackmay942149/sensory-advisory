@@ -42,6 +42,8 @@ p_swapchain_images: [dynamic]vk.Image
 p_swapchain_image_format: vk.Format
 @(private)
 p_swapchain_extent: vk.Extent2D
+@(private)
+p_swapchain_image_views: [dynamic]vk.ImageView
 
 init_window :: proc(width: i32, height: i32, title: cstring) {
 	p_ctx = context
@@ -72,6 +74,10 @@ close_window :: proc() {
 	delete(p_avail_extensions)
 	delete(p_avail_validation_layers)
 
+	for image in p_swapchain_image_views {
+		vk.DestroyImageView(p_logical_device, image, nil)
+	}
+	delete(p_swapchain_image_views)
 	vk.DestroySwapchainKHR(p_logical_device, p_swapchain, nil)
 	delete(p_swapchain_images)
 
@@ -100,6 +106,8 @@ init_vulkan :: proc() {
 	pick_physical_device()
 	create_logical_device()
 	create_swapchain()
+	create_image_views()
+	create_graphics_pipeline()
 }
 
 @(private = "file")
@@ -376,12 +384,14 @@ check_device_extension_support :: proc(device: vk.PhysicalDevice) -> bool {
 	return true
 }
 
+@(private = "file")
 SwapchainSupportDetails :: struct {
 	capabilities:  vk.SurfaceCapabilitiesKHR,
 	formats:       [dynamic]vk.SurfaceFormatKHR,
 	present_modes: [dynamic]vk.PresentModeKHR,
 }
 
+@(private = "file")
 query_swapchain_support :: proc(device: vk.PhysicalDevice) -> (details: SwapchainSupportDetails) {
 	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device, p_surface, &details.capabilities)
 
@@ -406,6 +416,7 @@ query_swapchain_support :: proc(device: vk.PhysicalDevice) -> (details: Swapchai
 	return details
 }
 
+@(private = "file")
 choose_swapchain_surface_format :: proc(
 	avail_formats: ^[dynamic]vk.SurfaceFormatKHR,
 ) -> vk.SurfaceFormatKHR {
@@ -419,6 +430,7 @@ choose_swapchain_surface_format :: proc(
 	return avail_formats[0] // TODO: improve non standard format picking
 }
 
+@(private = "file")
 choose_swapchain_present_mode :: proc(
 	avail_modes: ^[dynamic]vk.PresentModeKHR,
 ) -> vk.PresentModeKHR {
@@ -430,6 +442,7 @@ choose_swapchain_present_mode :: proc(
 	return .FIFO
 }
 
+@(private = "file")
 choose_swapchain_extent :: proc(using capabilities: ^vk.SurfaceCapabilitiesKHR) -> vk.Extent2D {
 	if (currentExtent.width != max(u32)) {
 		return currentExtent // Trick to query if window manager allows us to change extent
@@ -443,6 +456,7 @@ choose_swapchain_extent :: proc(using capabilities: ^vk.SurfaceCapabilitiesKHR) 
 	return actual_extent
 }
 
+@(private = "file")
 create_swapchain :: proc() {
 	swapchain_support := query_swapchain_support(p_physical_device) // TODO: check if logical device should be passed here
 	surface_format := choose_swapchain_surface_format(&swapchain_support.formats)
@@ -501,5 +515,37 @@ create_swapchain :: proc() {
 	)
 	p_swapchain_image_format = surface_format.format
 	p_swapchain_extent = extent
+}
+
+@(private = "file")
+create_image_views :: proc() {
+	p_swapchain_image_views = make([dynamic]vk.ImageView, len(p_swapchain_images))
+	for image, i in p_swapchain_image_views {
+		info := vk.ImageViewCreateInfo {
+			sType    = .IMAGE_VIEW_CREATE_INFO,
+			image    = p_swapchain_images[i],
+			viewType = vk.ImageViewType.D2,
+			format   = p_swapchain_image_format,
+		}
+		info.components.r = .IDENTITY
+		info.components.g = .IDENTITY
+		info.components.b = .IDENTITY
+		info.components.a = .IDENTITY
+		info.subresourceRange.aspectMask = vk.ImageAspectFlags{.COLOR}
+		info.subresourceRange.baseMipLevel = 0
+		info.subresourceRange.levelCount = 1
+		info.subresourceRange.baseArrayLayer = 0
+		info.subresourceRange.layerCount = 1
+
+		if vk.CreateImageView(p_logical_device, &info, nil, &p_swapchain_image_views[i]) !=
+		   .SUCCESS {
+			log.fatal("Failed to create image views")
+		}
+	}
+}
+
+@(private = "file")
+create_graphics_pipeline :: proc() {
+
 }
 
