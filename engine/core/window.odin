@@ -546,6 +546,6 @@ create_image_views :: proc() {
 
 @(private = "file")
 create_graphics_pipeline :: proc() {
-
+	// Load spv files
 }
 
