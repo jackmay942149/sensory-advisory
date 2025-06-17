@@ -587,6 +587,20 @@ create_graphics_pipeline :: proc() {
 	}
 	shader_stages := [?]vk.PipelineShaderStageCreateInfo{vertex_info, fragment_info}
 
+	dynamic_states := [?]vk.DynamicState{.VIEWPORT, .SCISSOR}
+	dynamic_state_info := vk.PipelineDynamicStateCreateInfo {
+		sType             = .PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+		dynamicStateCount = u32(len(dynamic_states)),
+		pDynamicStates    = raw_data(dynamic_states[:]),
+	}
+
+	vertex_input_info := vk.PipelineVertexInputStateCreateInfo {
+		sType                           = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		vertexBindingDescriptionCount   = 0,
+		pVertexBindingDescriptions      = nil,
+		vertexAttributeDescriptionCount = 0,
+		pVertexAttributeDescriptions    = nil,
+	}
 }
 
 @(private = "file")
