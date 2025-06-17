@@ -2,6 +2,7 @@ package core
 
 import "base:runtime"
 import "core:log"
+import "core:os"
 import "core:slice"
 import "core:strings"
 import "vendor:glfw"
@@ -211,8 +212,8 @@ setup_debug_messenger :: proc() {
 @(private = "file")
 populate_debug_messenger_create_info :: proc(info: ^vk.DebugUtilsMessengerCreateInfoEXT) {
 	info.sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT
-	info.messageSeverity = vk.DebugUtilsMessageSeverityFlagsEXT{.VERBOSE, .WARNING, .ERROR}
-	info.messageType = vk.DebugUtilsMessageTypeFlagsEXT{.GENERAL, .VALIDATION, .PERFORMANCE}
+	info.messageSeverity = {.VERBOSE, .WARNING, .ERROR}
+	info.messageType = {.GENERAL, .VALIDATION, .PERFORMANCE}
 	info.pfnUserCallback = debug_callback
 	info.pUserData = nil
 }
@@ -481,9 +482,9 @@ create_swapchain :: proc() {
 		imageColorSpace  = surface_format.colorSpace,
 		imageExtent      = extent,
 		imageArrayLayers = 1,
-		imageUsage       = vk.ImageUsageFlags{.COLOR_ATTACHMENT},
+		imageUsage       = {.COLOR_ATTACHMENT},
 		preTransform     = swapchain_support.capabilities.currentTransform,
-		compositeAlpha   = vk.CompositeAlphaFlagsKHR{.OPAQUE},
+		compositeAlpha   = {.OPAQUE},
 		presentMode      = present_mode,
 		clipped          = true,
 		oldSwapchain     = 0,
@@ -531,7 +532,7 @@ create_image_views :: proc() {
 		info.components.g = .IDENTITY
 		info.components.b = .IDENTITY
 		info.components.a = .IDENTITY
-		info.subresourceRange.aspectMask = vk.ImageAspectFlags{.COLOR}
+		info.subresourceRange.aspectMask = {.COLOR}
 		info.subresourceRange.baseMipLevel = 0
 		info.subresourceRange.levelCount = 1
 		info.subresourceRange.baseArrayLayer = 0
@@ -546,6 +547,57 @@ create_image_views :: proc() {
 
 @(private = "file")
 create_graphics_pipeline :: proc() {
-	// Load spv files
+	vertex_shader_data, err := os.read_entire_file_from_filename_or_err(
+		"./assets/vert.spv",
+		context.allocator,
+	)
+	if err != nil {
+		log.fatal("Could not find vertex shader")
+	}
+
+	fragment_shader_data: []u8
+	fragment_shader_data, err = os.read_entire_file_from_filename_or_err(
+		"./assets/frag.spv",
+		context.allocator,
+	)
+	if err != nil {
+		log.fatal("Could not find fragment shader")
+	}
+
+	vertex_shader_module := create_shader_module(vertex_shader_data)
+	fragment_shader_module := create_shader_module(fragment_shader_data)
+	defer {
+		vk.DestroyShaderModule(p_logical_device, fragment_shader_module, nil)
+		vk.DestroyShaderModule(p_logical_device, vertex_shader_module, nil)
+		delete(vertex_shader_data)
+		delete(fragment_shader_data)
+	}
+
+	vertex_info := vk.PipelineShaderStageCreateInfo {
+		sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage  = {.VERTEX},
+		module = vertex_shader_module,
+		pName  = "main",
+	}
+	fragment_info := vk.PipelineShaderStageCreateInfo {
+		sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage  = {.FRAGMENT},
+		module = fragment_shader_module,
+		pName  = "main",
+	}
+	shader_stages := [?]vk.PipelineShaderStageCreateInfo{vertex_info, fragment_info}
+
+}
+
+@(private = "file")
+create_shader_module :: proc(data: []u8) -> vk.ShaderModule {
+	info := vk.ShaderModuleCreateInfo {
+		sType    = .SHADER_MODULE_CREATE_INFO,
+		codeSize = len(data),
+		pCode    = cast(^u32)raw_data(data),
+	}
+	shader: vk.ShaderModule
+	vk.CreateShaderModule(p_logical_device, &info, nil, &shader)
+	return shader
 }
 
