@@ -45,6 +45,10 @@ p_swapchain_image_format: vk.Format
 p_swapchain_extent: vk.Extent2D
 @(private)
 p_swapchain_image_views: [dynamic]vk.ImageView
+@(private)
+p_render_pass: vk.RenderPass
+@(private)
+p_pipeline_layout: vk.PipelineLayout
 
 init_window :: proc(width: i32, height: i32, title: cstring) {
 	p_ctx = context
@@ -74,6 +78,9 @@ close_window :: proc() {
 
 	delete(p_avail_extensions)
 	delete(p_avail_validation_layers)
+
+	vk.DestroyPipelineLayout(p_logical_device, p_pipeline_layout, nil)
+	vk.DestroyRenderPass(p_logical_device, p_render_pass, nil)
 
 	for image in p_swapchain_image_views {
 		vk.DestroyImageView(p_logical_device, image, nil)
@@ -108,6 +115,7 @@ init_vulkan :: proc() {
 	create_logical_device()
 	create_swapchain()
 	create_image_views()
+	create_render_pass()
 	create_graphics_pipeline()
 }
 
@@ -671,6 +679,23 @@ create_graphics_pipeline :: proc() {
 		pAttachments    = &color_blend_attachment,
 		blendConstants  = {0, 0, 0, 0},
 	}
+
+	pipeline_layout_info := vk.PipelineLayoutCreateInfo {
+		sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
+		setLayoutCount         = 0,
+		pSetLayouts            = nil,
+		pushConstantRangeCount = 0,
+		pPushConstantRanges    = nil,
+	}
+	if (vk.CreatePipelineLayout(
+			   p_logical_device,
+			   &pipeline_layout_info,
+			   nil,
+			   &p_pipeline_layout,
+		   ) !=
+		   .SUCCESS) {
+		log.fatal("Failed to create pipeline layout")
+	}
 }
 
 @(private = "file")
@@ -683,5 +708,41 @@ create_shader_module :: proc(data: []u8) -> vk.ShaderModule {
 	shader: vk.ShaderModule
 	vk.CreateShaderModule(p_logical_device, &info, nil, &shader)
 	return shader
+}
+
+@(private = "file")
+create_render_pass :: proc() {
+	color_attachment := vk.AttachmentDescription {
+		format         = p_swapchain_image_format,
+		samples        = {._1},
+		loadOp         = .CLEAR,
+		storeOp        = .STORE,
+		stencilLoadOp  = .DONT_CARE,
+		stencilStoreOp = .DONT_CARE,
+		initialLayout  = .UNDEFINED,
+		finalLayout    = .PRESENT_SRC_KHR,
+	}
+
+	color_attachement_ref := vk.AttachmentReference {
+		attachment = 0,
+		layout     = .COLOR_ATTACHMENT_OPTIMAL,
+	}
+
+	subpass := vk.SubpassDescription {
+		pipelineBindPoint    = .GRAPHICS,
+		colorAttachmentCount = 1,
+		pColorAttachments    = &color_attachement_ref,
+	}
+
+	info := vk.RenderPassCreateInfo {
+		sType           = .RENDER_PASS_CREATE_INFO,
+		attachmentCount = 1,
+		pAttachments    = &color_attachment,
+		subpassCount    = 1,
+		pSubpasses      = &subpass,
+	}
+	if (vk.CreateRenderPass(p_logical_device, &info, nil, &p_render_pass) != .SUCCESS) {
+		log.fatal("Failed to create render pass")
+	}
 }
 
