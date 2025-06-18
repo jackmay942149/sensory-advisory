@@ -53,6 +53,11 @@ p_pipeline_layout: vk.PipelineLayout
 p_graphics_pipeline: vk.Pipeline
 @(private)
 p_swapchain_framebuffers: [dynamic]vk.Framebuffer
+@(private)
+p_command_pool: vk.CommandPool
+@(private)
+p_command_buffer: vk.CommandBuffer
+
 
 init_window :: proc(width: i32, height: i32, title: cstring) {
 	p_ctx = context
@@ -82,6 +87,8 @@ close_window :: proc() {
 
 	delete(p_avail_extensions)
 	delete(p_avail_validation_layers)
+
+	vk.DestroyCommandPool(p_logical_device, p_command_pool, nil)
 
 	for buffer in p_swapchain_framebuffers {
 		vk.DestroyFramebuffer(p_logical_device, buffer, nil)
@@ -128,6 +135,8 @@ init_vulkan :: proc() {
 	create_render_pass()
 	create_graphics_pipeline()
 	create_framebuffers()
+	create_command_pool()
+	create_command_buffer()
 }
 
 @(private = "file")
@@ -797,6 +806,79 @@ create_framebuffers :: proc() {
 		   .SUCCESS {
 			log.fatal("Failed to create framebuffer")
 		}
+	}
+}
+
+
+create_command_pool :: proc() {
+	queue_family_indicies := find_queue_families(p_physical_device)
+	info := vk.CommandPoolCreateInfo {
+		sType            = .COMMAND_POOL_CREATE_INFO,
+		flags            = {.RESET_COMMAND_BUFFER},
+		queueFamilyIndex = queue_family_indicies.graphics_family.?,
+	}
+	if vk.CreateCommandPool(p_logical_device, &info, nil, &p_command_pool) != .SUCCESS {
+		log.fatal("Failed to create command pool")
+	}
+
+}
+
+create_command_buffer :: proc() {
+	alloc_info := vk.CommandBufferAllocateInfo {
+		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
+		commandPool        = p_command_pool,
+		level              = .PRIMARY,
+		commandBufferCount = 1,
+	}
+	if vk.AllocateCommandBuffers(p_logical_device, &alloc_info, &p_command_buffer) != .SUCCESS {
+		log.fatal("Failed to allocate command buffers")
+	}
+}
+
+record_command_buffer :: proc(command_buffer: vk.CommandBuffer, image_index: u32) {
+	begin_info := vk.CommandBufferBeginInfo {
+		sType            = .COMMAND_BUFFER_BEGIN_INFO,
+		flags            = {},
+		pInheritanceInfo = nil,
+	}
+	if vk.BeginCommandBuffer(command_buffer, &begin_info) != .SUCCESS {
+		log.fatal("Failed to begin recording command buffer")
+	}
+
+	clear_color := vk.ClearValue {
+		color = {float32 = {0, 0, 0, 1}},
+	}
+
+	render_pass_info := vk.RenderPassBeginInfo {
+		sType = .RENDER_PASS_BEGIN_INFO,
+		renderPass = p_render_pass,
+		framebuffer = p_swapchain_framebuffers[image_index],
+		renderArea = vk.Rect2D{offset = {0, 0}, extent = p_swapchain_extent},
+		clearValueCount = 1,
+		pClearValues = &clear_color,
+	}
+	vk.CmdBeginRenderPass(command_buffer, &render_pass_info, .INLINE)
+
+	vk.CmdBindPipeline(command_buffer, .GRAPHICS, p_graphics_pipeline)
+	viewport := vk.Viewport {
+		x        = 0,
+		y        = 0,
+		width    = f32(p_swapchain_extent.width),
+		height   = f32(p_swapchain_extent.height),
+		minDepth = 0,
+		maxDepth = 1,
+	}
+	vk.CmdSetViewport(command_buffer, 0, 1, &viewport)
+
+	scissor := vk.Rect2D {
+		offset = {0, 0},
+		extent = p_swapchain_extent,
+	}
+	vk.CmdSetScissor(command_buffer, 0, 1, &scissor)
+	vk.CmdDraw(command_buffer, 3, 1, 0, 0)
+	vk.CmdEndRenderPass(command_buffer)
+	if (vk.EndCommandBuffer(command_buffer) != .SUCCESS) {
+		log.fatal("Failed to record command buffer")
 	}
 }
 
