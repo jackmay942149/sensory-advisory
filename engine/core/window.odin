@@ -49,6 +49,8 @@ p_swapchain_image_views: [dynamic]vk.ImageView
 p_render_pass: vk.RenderPass
 @(private)
 p_pipeline_layout: vk.PipelineLayout
+@(private)
+p_graphics_pipeline: vk.Pipeline
 
 init_window :: proc(width: i32, height: i32, title: cstring) {
 	p_ctx = context
@@ -79,6 +81,7 @@ close_window :: proc() {
 	delete(p_avail_extensions)
 	delete(p_avail_validation_layers)
 
+	vk.DestroyPipeline(p_logical_device, p_graphics_pipeline, nil)
 	vk.DestroyPipelineLayout(p_logical_device, p_pipeline_layout, nil)
 	vk.DestroyRenderPass(p_logical_device, p_render_pass, nil)
 
@@ -695,6 +698,29 @@ create_graphics_pipeline :: proc() {
 		   ) !=
 		   .SUCCESS) {
 		log.fatal("Failed to create pipeline layout")
+	}
+
+	info := vk.GraphicsPipelineCreateInfo {
+		sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
+		stageCount          = 2,
+		pStages             = raw_data(shader_stages[:]),
+		pVertexInputState   = &vertex_input_info,
+		pInputAssemblyState = &input_assembley_info,
+		pViewportState      = &viewport_state,
+		pRasterizationState = &rasterizer,
+		pMultisampleState   = &multisampling,
+		pDepthStencilState  = nil,
+		pColorBlendState    = &color_blend_state,
+		pDynamicState       = &dynamic_state_info,
+		layout              = p_pipeline_layout,
+		renderPass          = p_render_pass,
+		subpass             = 0,
+		basePipelineHandle  = 0,
+		basePipelineIndex   = -1,
+	}
+	if vk.CreateGraphicsPipelines(p_logical_device, 0, 1, &info, nil, &p_graphics_pipeline) !=
+	   .SUCCESS {
+		log.fatal("Failed to create graphics pipeline")
 	}
 }
 
