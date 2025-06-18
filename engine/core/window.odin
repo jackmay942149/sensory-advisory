@@ -57,7 +57,12 @@ p_swapchain_framebuffers: [dynamic]vk.Framebuffer
 p_command_pool: vk.CommandPool
 @(private)
 p_command_buffer: vk.CommandBuffer
-
+@(private)
+p_image_avail_semaphore: vk.Semaphore
+@(private)
+p_render_finished_semaphore: vk.Semaphore
+@(private)
+p_in_flight_fence: vk.Fence
 
 init_window :: proc(width: i32, height: i32, title: cstring) {
 	p_ctx = context
@@ -73,6 +78,7 @@ init_window :: proc(width: i32, height: i32, title: cstring) {
 
 window_should_close :: proc() -> bool {
 	glfw.PollEvents()
+	draw_frame()
 
 	if glfw.GetKey(p_window, glfw.KEY_ESCAPE) == glfw.PRESS {
 		return true
@@ -87,6 +93,11 @@ close_window :: proc() {
 
 	delete(p_avail_extensions)
 	delete(p_avail_validation_layers)
+
+	vk.DestroySemaphore(p_logical_device, p_image_avail_semaphore, nil)
+	vk.DestroySemaphore(p_logical_device, p_render_finished_semaphore, nil)
+	vk.DestroyFence(p_logical_device, p_in_flight_fence, nil)
+
 
 	vk.DestroyCommandPool(p_logical_device, p_command_pool, nil)
 
@@ -137,6 +148,7 @@ init_vulkan :: proc() {
 	create_framebuffers()
 	create_command_pool()
 	create_command_buffer()
+	create_sync_objects()
 }
 
 @(private = "file")
@@ -777,12 +789,23 @@ create_render_pass :: proc() {
 		pColorAttachments    = &color_attachement_ref,
 	}
 
+	dependency := vk.SubpassDependency {
+		srcSubpass    = vk.SUBPASS_EXTERNAL,
+		dstSubpass    = 0,
+		srcStageMask  = {.COLOR_ATTACHMENT_OUTPUT},
+		srcAccessMask = {},
+		dstStageMask  = {.COLOR_ATTACHMENT_OUTPUT},
+		dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
+	}
+
 	info := vk.RenderPassCreateInfo {
 		sType           = .RENDER_PASS_CREATE_INFO,
 		attachmentCount = 1,
 		pAttachments    = &color_attachment,
 		subpassCount    = 1,
 		pSubpasses      = &subpass,
+		dependencyCount = 1,
+		pDependencies   = &dependency,
 	}
 	if (vk.CreateRenderPass(p_logical_device, &info, nil, &p_render_pass) != .SUCCESS) {
 		log.fatal("Failed to create render pass")
@@ -880,5 +903,73 @@ record_command_buffer :: proc(command_buffer: vk.CommandBuffer, image_index: u32
 	if (vk.EndCommandBuffer(command_buffer) != .SUCCESS) {
 		log.fatal("Failed to record command buffer")
 	}
+}
+
+create_sync_objects :: proc() {
+	semaphore_info := vk.SemaphoreCreateInfo {
+		sType = .SEMAPHORE_CREATE_INFO,
+	}
+	fence_info := vk.FenceCreateInfo {
+		sType = .FENCE_CREATE_INFO,
+		flags = {.SIGNALED},
+	}
+	if vk.CreateSemaphore(p_logical_device, &semaphore_info, nil, &p_image_avail_semaphore) !=
+	   .SUCCESS {
+		log.fatal("failed to create semaphore")
+	}
+	if vk.CreateSemaphore(p_logical_device, &semaphore_info, nil, &p_render_finished_semaphore) !=
+	   .SUCCESS {
+		log.fatal("failed to create semaphore")
+	}
+	if vk.CreateFence(p_logical_device, &fence_info, nil, &p_in_flight_fence) != .SUCCESS {
+		log.fatal("failed to create fence")
+	}
+}
+
+draw_frame :: proc() {
+	vk.WaitForFences(p_logical_device, 1, &p_in_flight_fence, true, max(u64))
+	vk.ResetFences(p_logical_device, 1, &p_in_flight_fence)
+
+	image_index: u32
+	vk.AcquireNextImageKHR(
+		p_logical_device,
+		p_swapchain,
+		max(u64),
+		p_image_avail_semaphore,
+		0,
+		&image_index,
+	)
+
+	vk.ResetCommandBuffer(p_command_buffer, {})
+	record_command_buffer(p_command_buffer, image_index)
+
+	wait_semaphores := [?]vk.Semaphore{p_image_avail_semaphore}
+	wait_stages := [?]vk.PipelineStageFlags{{.COLOR_ATTACHMENT_OUTPUT}}
+	signal_semaphores := [?]vk.Semaphore{p_render_finished_semaphore}
+	submit_info := vk.SubmitInfo {
+		sType                = .SUBMIT_INFO,
+		waitSemaphoreCount   = 1,
+		pWaitSemaphores      = raw_data(wait_semaphores[:]),
+		pWaitDstStageMask    = raw_data(wait_stages[:]),
+		commandBufferCount   = 1,
+		pCommandBuffers      = &p_command_buffer,
+		signalSemaphoreCount = 1,
+		pSignalSemaphores    = raw_data(signal_semaphores[:]),
+	}
+	if vk.QueueSubmit(p_graphics_queue, 1, &submit_info, p_in_flight_fence) != .SUCCESS {
+		log.fatal("Failed to submit draw command buffer")
+	}
+
+	swapchains := [?]vk.SwapchainKHR{p_swapchain}
+	present_info := vk.PresentInfoKHR {
+		sType              = .PRESENT_INFO_KHR,
+		waitSemaphoreCount = 1,
+		pWaitSemaphores    = raw_data(signal_semaphores[:]),
+		swapchainCount     = 1,
+		pSwapchains        = raw_data(swapchains[:]),
+		pImageIndices      = &image_index,
+		pResults           = nil,
+	}
+	vk.QueuePresentKHR(p_presentation_queue, &present_info)
 }
 
