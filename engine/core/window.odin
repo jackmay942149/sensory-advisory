@@ -51,6 +51,8 @@ p_render_pass: vk.RenderPass
 p_pipeline_layout: vk.PipelineLayout
 @(private)
 p_graphics_pipeline: vk.Pipeline
+@(private)
+p_swapchain_framebuffers: [dynamic]vk.Framebuffer
 
 init_window :: proc(width: i32, height: i32, title: cstring) {
 	p_ctx = context
@@ -80,6 +82,11 @@ close_window :: proc() {
 
 	delete(p_avail_extensions)
 	delete(p_avail_validation_layers)
+
+	for buffer in p_swapchain_framebuffers {
+		vk.DestroyFramebuffer(p_logical_device, buffer, nil)
+	}
+	delete(p_swapchain_framebuffers)
 
 	vk.DestroyPipeline(p_logical_device, p_graphics_pipeline, nil)
 	vk.DestroyPipelineLayout(p_logical_device, p_pipeline_layout, nil)
@@ -120,6 +127,7 @@ init_vulkan :: proc() {
 	create_image_views()
 	create_render_pass()
 	create_graphics_pipeline()
+	create_framebuffers()
 }
 
 @(private = "file")
@@ -769,6 +777,26 @@ create_render_pass :: proc() {
 	}
 	if (vk.CreateRenderPass(p_logical_device, &info, nil, &p_render_pass) != .SUCCESS) {
 		log.fatal("Failed to create render pass")
+	}
+}
+
+create_framebuffers :: proc() {
+	p_swapchain_framebuffers = make([dynamic]vk.Framebuffer, len(p_swapchain_image_views))
+	for view, i in p_swapchain_image_views {
+		attachments := [?]vk.ImageView{view}
+		info := vk.FramebufferCreateInfo {
+			sType           = .FRAMEBUFFER_CREATE_INFO,
+			renderPass      = p_render_pass,
+			attachmentCount = 1,
+			pAttachments    = raw_data(attachments[:]),
+			width           = p_swapchain_extent.width,
+			height          = p_swapchain_extent.height,
+			layers          = 1,
+		}
+		if vk.CreateFramebuffer(p_logical_device, &info, nil, &p_swapchain_framebuffers[i]) !=
+		   .SUCCESS {
+			log.fatal("Failed to create framebuffer")
+		}
 	}
 }
 
