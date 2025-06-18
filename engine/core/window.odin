@@ -601,6 +601,76 @@ create_graphics_pipeline :: proc() {
 		vertexAttributeDescriptionCount = 0,
 		pVertexAttributeDescriptions    = nil,
 	}
+
+	input_assembley_info := vk.PipelineInputAssemblyStateCreateInfo {
+		sType                  = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+		topology               = .TRIANGLE_LIST,
+		primitiveRestartEnable = false,
+	}
+
+	viewport := vk.Viewport {
+		x        = 0,
+		y        = 0,
+		width    = f32(p_swapchain_extent.width),
+		height   = f32(p_swapchain_extent.height),
+		minDepth = 0,
+		maxDepth = 1,
+	}
+
+	scissor := vk.Rect2D {
+		offset = vk.Offset2D{x = 0, y = 0},
+		extent = p_swapchain_extent,
+	}
+
+	viewport_state := vk.PipelineViewportStateCreateInfo {
+		sType         = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+		viewportCount = 1,
+		scissorCount  = 1,
+	}
+
+	rasterizer := vk.PipelineRasterizationStateCreateInfo {
+		sType                   = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		depthClampEnable        = false,
+		rasterizerDiscardEnable = false,
+		polygonMode             = .FILL,
+		lineWidth               = 1,
+		cullMode                = {.BACK},
+		frontFace               = .CLOCKWISE,
+		depthBiasEnable         = false,
+		depthBiasConstantFactor = 0,
+		depthBiasClamp          = 0,
+		depthBiasSlopeFactor    = 0,
+	}
+
+	multisampling := vk.PipelineMultisampleStateCreateInfo {
+		sType                 = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+		sampleShadingEnable   = false,
+		rasterizationSamples  = {._1},
+		minSampleShading      = 1,
+		pSampleMask           = nil,
+		alphaToCoverageEnable = false,
+		alphaToOneEnable      = false,
+	}
+
+	color_blend_attachment := vk.PipelineColorBlendAttachmentState {
+		colorWriteMask      = {.R, .G, .B, .A},
+		blendEnable         = true,
+		srcColorBlendFactor = .SRC_ALPHA,
+		dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA,
+		colorBlendOp        = .ADD,
+		srcAlphaBlendFactor = .ONE,
+		dstAlphaBlendFactor = .ZERO,
+		alphaBlendOp        = .ADD,
+	}
+
+	color_blend_state := vk.PipelineColorBlendStateCreateInfo {
+		sType           = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		logicOpEnable   = false,
+		logicOp         = .COPY,
+		attachmentCount = 1,
+		pAttachments    = &color_blend_attachment,
+		blendConstants  = {0, 0, 0, 0},
+	}
 }
 
 @(private = "file")
