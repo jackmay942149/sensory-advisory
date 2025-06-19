@@ -69,7 +69,7 @@ init_window :: proc(width: i32, height: i32, title: cstring) {
 	assert(p_window == nil)
 	glfw.Init()
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-	glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
+	glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE)
 	p_window = glfw.CreateWindow(width, height, title, nil, nil)
 	assert(p_window != nil)
 	init_vulkan()
@@ -83,6 +83,7 @@ window_should_close :: proc() -> bool {
 	if glfw.GetKey(p_window, glfw.KEY_ESCAPE) == glfw.PRESS {
 		return true
 	}
+	vk_assert(vk.DeviceWaitIdle(p_logical_device), "Failed to wait for synchronisation")
 	return bool(glfw.WindowShouldClose(p_window))
 }
 
@@ -90,6 +91,8 @@ close_window :: proc() {
 	assert(p_window != nil)
 	assert(p_instance != nil)
 	assert(p_logical_device != nil)
+
+	vk_assert(vk.DeviceWaitIdle(p_logical_device), "Failed to wait for synchronisation")
 
 	delete(p_avail_extensions)
 	delete(p_avail_validation_layers)
@@ -940,7 +943,7 @@ draw_frame :: proc() {
 		&image_index,
 	)
 
-	vk.ResetCommandBuffer(p_command_buffer, {})
+	vk_assert(vk.ResetCommandBuffer(p_command_buffer, {}), "Failed to reset command buffer")
 	record_command_buffer(p_command_buffer, image_index)
 
 	wait_semaphores := [?]vk.Semaphore{p_image_avail_semaphore}
@@ -956,9 +959,11 @@ draw_frame :: proc() {
 		signalSemaphoreCount = 1,
 		pSignalSemaphores    = raw_data(signal_semaphores[:]),
 	}
-	if vk.QueueSubmit(p_graphics_queue, 1, &submit_info, p_in_flight_fence) != .SUCCESS {
-		log.fatal("Failed to submit draw command buffer")
-	}
+
+	vk_assert(
+		vk.QueueSubmit(p_graphics_queue, 1, &submit_info, p_in_flight_fence),
+		"Failed to submit draw command buffer",
+	)
 
 	swapchains := [?]vk.SwapchainKHR{p_swapchain}
 	present_info := vk.PresentInfoKHR {
@@ -970,6 +975,14 @@ draw_frame :: proc() {
 		pImageIndices      = &image_index,
 		pResults           = nil,
 	}
-	vk.QueuePresentKHR(p_presentation_queue, &present_info)
+
+	vk_assert(vk.QueuePresentKHR(p_presentation_queue, &present_info), "Failed to present frame")
+}
+
+vk_assert :: proc(attempt: vk.Result, message: string, loc := #caller_location) {
+	if attempt != .SUCCESS {
+		log.fatal(message, location = loc)
+		assert(false)
+	}
 }
 
