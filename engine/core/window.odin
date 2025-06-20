@@ -64,13 +64,14 @@ p_render_finished_semaphore: vk.Semaphore
 @(private)
 p_in_flight_fence: vk.Fence
 
-init_window :: proc(width: i32, height: i32, title: cstring) {
+init_window :: proc(width: i32, height: i32, title: string) {
 	p_ctx = context
 	assert(p_window == nil)
 	glfw.Init()
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 	glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE)
-	p_window = glfw.CreateWindow(width, height, title, nil, nil)
+	glfw_title := strings.clone_to_cstring(title)
+	p_window = glfw.CreateWindow(width, height, glfw_title, nil, nil)
 	assert(p_window != nil)
 	init_vulkan()
 	log.info("Initialised window")
