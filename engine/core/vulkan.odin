@@ -473,7 +473,9 @@ create_swapchain :: proc() {
 	}
 
 	vk.GetSwapchainImagesKHR(vk_ctx.logical_device, vk_ctx.swapchain, &image_count, nil)
-	vk_ctx.swapchain_images = make([dynamic]vk.Image, image_count, context.allocator)
+	if len(vk_ctx.swapchain_images) == 0 {
+		vk_ctx.swapchain_images = make([dynamic]vk.Image, image_count, context.allocator)
+	}
 	vk.GetSwapchainImagesKHR(
 		vk_ctx.logical_device,
 		vk_ctx.swapchain,
@@ -486,7 +488,9 @@ create_swapchain :: proc() {
 
 @(private)
 create_image_views :: proc() {
-	vk_ctx.swapchain_image_views = make([dynamic]vk.ImageView, len(vk_ctx.swapchain_images))
+	if len(vk_ctx.swapchain_image_views) == 0 {
+		vk_ctx.swapchain_image_views = make([dynamic]vk.ImageView, len(vk_ctx.swapchain_images))
+	}
 	for image, i in vk_ctx.swapchain_image_views {
 		info := vk.ImageViewCreateInfo {
 			sType    = .IMAGE_VIEW_CREATE_INFO,
@@ -752,10 +756,12 @@ create_render_pass :: proc() {
 
 @(private)
 create_framebuffers :: proc() {
-	vk_ctx.swapchain_framebuffers = make(
-		[dynamic]vk.Framebuffer,
-		len(vk_ctx.swapchain_image_views),
-	)
+	if len(vk_ctx.swapchain_framebuffers) == 0 {
+		vk_ctx.swapchain_framebuffers = make(
+			[dynamic]vk.Framebuffer,
+			len(vk_ctx.swapchain_image_views),
+		)
+	}
 	for view, i in vk_ctx.swapchain_image_views {
 		attachments := [?]vk.ImageView{view}
 		info := vk.FramebufferCreateInfo {
@@ -891,10 +897,10 @@ create_sync_objects :: proc() {
 
 draw_frame :: proc() { 	// TODO: put this as a public window function
 	vk.WaitForFences(vk_ctx.logical_device, 1, &vk_ctx.in_flight_fence, true, max(u64))
-	vk.ResetFences(vk_ctx.logical_device, 1, &vk_ctx.in_flight_fence)
+
 
 	image_index: u32
-	vk.AcquireNextImageKHR(
+	swapchain_validity := vk.AcquireNextImageKHR(
 		vk_ctx.logical_device,
 		vk_ctx.swapchain,
 		max(u64),
@@ -902,6 +908,16 @@ draw_frame :: proc() { 	// TODO: put this as a public window function
 		0,
 		&image_index,
 	)
+
+	#partial switch swapchain_validity {
+	case .ERROR_OUT_OF_DATE_KHR:
+		recreate_swapchain()
+	case .SUCCESS, .SUBOPTIMAL_KHR:
+	case:
+		log.fatal("Failed to create swapchain image")
+	}
+
+	vk.ResetFences(vk_ctx.logical_device, 1, &vk_ctx.in_flight_fence)
 
 	vk_assert(vk.ResetCommandBuffer(vk_ctx.command_buffer, {}), "Failed to reset command buffer")
 	record_command_buffer(vk_ctx.command_buffer, image_index)
@@ -936,10 +952,14 @@ draw_frame :: proc() { 	// TODO: put this as a public window function
 		pResults           = nil,
 	}
 
-	vk_assert(
-		vk.QueuePresentKHR(vk_ctx.presentation_queue, &present_info),
-		"Failed to present frame",
-	)
+	swapchain_validity = vk.QueuePresentKHR(vk_ctx.presentation_queue, &present_info)
+	#partial switch swapchain_validity {
+	case .ERROR_OUT_OF_DATE_KHR, .SUBOPTIMAL_KHR:
+		recreate_swapchain()
+	case .SUCCESS:
+	case:
+		log.fatal("failed to present frame")
+	}
 }
 
 @(private)
@@ -947,6 +967,31 @@ vk_assert :: proc(attempt: vk.Result, message: string, loc := #caller_location) 
 	if attempt != .SUCCESS {
 		log.fatal(message, location = loc)
 		assert(false)
+	}
+}
+
+
+@(private)
+recreate_swapchain :: proc() {
+	vk.DeviceWaitIdle(vk_ctx.logical_device)
+	cleanup_swapchain(false)
+	create_swapchain()
+	create_image_views()
+	create_framebuffers()
+}
+
+@(private)
+cleanup_swapchain :: proc(closing_app: bool) {
+	for buffer in vk_ctx.swapchain_framebuffers {
+		vk.DestroyFramebuffer(vk_ctx.logical_device, buffer, nil)
+	}
+	for image in vk_ctx.swapchain_image_views {
+		vk.DestroyImageView(vk_ctx.logical_device, image, nil)
+	}
+	vk.DestroySwapchainKHR(vk_ctx.logical_device, vk_ctx.swapchain, nil)
+	if closing_app {
+		delete(vk_ctx.swapchain_framebuffers)
+		delete(vk_ctx.swapchain_image_views)
 	}
 }
 

@@ -48,22 +48,14 @@ close_window :: proc() { 	// TODO: have a destroy vulkan function
 	vk_assert(vk.DeviceWaitIdle(vk_ctx.logical_device), "Failed to wait for synchronisation")
 	delete(vk_ctx.avail_extensions)
 	delete(vk_ctx.avail_validation_layers)
+	cleanup_swapchain(true)
 	vk.DestroySemaphore(vk_ctx.logical_device, vk_ctx.image_avail_semaphore, nil)
 	vk.DestroySemaphore(vk_ctx.logical_device, vk_ctx.render_finished_semaphore, nil)
 	vk.DestroyFence(vk_ctx.logical_device, vk_ctx.in_flight_fence, nil)
 	vk.DestroyCommandPool(vk_ctx.logical_device, vk_ctx.command_pool, nil)
-	for buffer in vk_ctx.swapchain_framebuffers {
-		vk.DestroyFramebuffer(vk_ctx.logical_device, buffer, nil)
-	}
-	delete(vk_ctx.swapchain_framebuffers)
 	vk.DestroyPipeline(vk_ctx.logical_device, vk_ctx.graphics_pipeline, nil)
 	vk.DestroyPipelineLayout(vk_ctx.logical_device, vk_ctx.pipeline_layout, nil)
 	vk.DestroyRenderPass(vk_ctx.logical_device, vk_ctx.render_pass, nil)
-	for image in vk_ctx.swapchain_image_views {
-		vk.DestroyImageView(vk_ctx.logical_device, image, nil)
-	}
-	delete(vk_ctx.swapchain_image_views)
-	vk.DestroySwapchainKHR(vk_ctx.logical_device, vk_ctx.swapchain, nil)
 	delete(vk_ctx.swapchain_images)
 	vk.DestroySurfaceKHR(vk_ctx.instance, vk_ctx.surface, nil)
 	vk.DestroyDevice(vk_ctx.logical_device, nil)
