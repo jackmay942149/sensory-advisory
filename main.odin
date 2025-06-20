@@ -5,15 +5,10 @@ import "core:log"
 import "core:mem"
 import "engine/core"
 
-g_ctx: runtime.Context
-g_tracker: mem.Tracking_Allocator
-
 main :: proc() {
-	//	g_ctx = context
 	context.logger = core.init_logger("./log.txt")
-	// context = g_ctx
-	g_tracker = core.init_tracker(&g_ctx)
-	context.allocator = mem.tracking_allocator(&g_tracker)
+	tracker: ^mem.Tracking_Allocator
+	tracker, context.allocator = core.init_tracker()
 
 	core.init_window(1920 / 2, 1080 / 2, "Vulkan")
 	for !core.window_should_close() {
@@ -21,6 +16,6 @@ main :: proc() {
 	}
 	core.close_window()
 
-	core.destroy_tracker(&g_tracker)
+	core.destroy_tracker(tracker)
 }
 
