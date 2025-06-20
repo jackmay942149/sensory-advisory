@@ -17,9 +17,13 @@
 
 `maximise_window :: () -> ()`
 
-[Make window full screen borderless]()
+[Make the window full screen borderless]()
 
 `borderless_window :: () -> ()`
+
+[Set a new title for the window]()
+
+`set_window_title :: (title: string) -> ()`
 
 ### Logger
 [Create a console and file logger at filepath, will but additional debug info into file to keep console cleaner]()

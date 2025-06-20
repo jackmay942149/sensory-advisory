@@ -156,6 +156,12 @@ borderless_window :: proc() {
 	)
 }
 
+set_window_title :: proc(title: string) {
+	c := strings.clone_to_cstring(title, context.allocator)
+	delete(c)
+	glfw.SetWindowTitle(p_window, c)
+}
+
 @(private = "file")
 init_vulkan :: proc() {
 	create_instance()
