@@ -1,5 +1,4 @@
 # Engine Cheatsheet
-
 ## Core
 ### Window
 [Initilalise a window with given dimensions width*height and header title, including a vulkan context]()
@@ -13,6 +12,14 @@
 [Close a window, and clean the vulkan context]()
 
 `close_window :: () -> ()`
+
+[Maximise the window, seems to keep current resoloution]()
+
+`maximise_window :: () -> ()`
+
+[Make window full screen borderless]()
+
+`borderless_window :: () -> ()`
 
 ### Logger
 [Create a console and file logger at filepath, will but additional debug info into file to keep console cleaner]()

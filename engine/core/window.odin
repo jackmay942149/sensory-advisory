@@ -70,7 +70,8 @@ init_window :: proc(width: i32, height: i32, title: string) {
 	glfw.Init()
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 	glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE)
-	glfw_title := strings.clone_to_cstring(title)
+	glfw_title := strings.clone_to_cstring(title, context.allocator)
+	defer delete(glfw_title)
 	p_window = glfw.CreateWindow(width, height, glfw_title, nil, nil)
 	assert(p_window != nil)
 	init_vulkan()
@@ -135,6 +136,24 @@ close_window :: proc() {
 	glfw.Terminate()
 	p_window = nil
 	log.info("Closed window")
+}
+
+maximise_window :: proc() {
+	glfw.MaximizeWindow(p_window)
+}
+
+borderless_window :: proc() {
+	monitor := glfw.GetPrimaryMonitor()
+	borderless := glfw.GetVideoMode(monitor)
+	glfw.SetWindowMonitor(
+		p_window,
+		monitor,
+		0,
+		0,
+		borderless.width,
+		borderless.height,
+		borderless.refresh_rate,
+	)
 }
 
 @(private = "file")
