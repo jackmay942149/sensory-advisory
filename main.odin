@@ -13,12 +13,10 @@ main :: proc() {
 	glfw_ctx := core.init_window(1920 / 2, 1080 / 2, "Vulkan")
 	input.init(glfw_ctx.window)
 
-	core.user_log(.Jack, .Info, "a") // Prints
-	core.user_log(.Mitch, .Info, "b") // Does not print
-	core.user_log(.All, .Info, "c") // You wouldn't use this but does print
-	core.topic_log(.Graphics, .Info, "A") // Prints
-	core.topic_log(.Input, .Info, "B") // Prints
-	core.topic_log(.All, .Info, "C") // Prints
+	key1 := input.Key{.M, {.Ctrl}, .Press}
+	key2 := input.Key{.T, {.Alt}, .Press}
+	input.bind_key(key1, core.maximise_window)
+	input.bind_toggle(key2, set_title_a, set_title_b)
 	defer {
 		core.destroy_window()
 		input.destroy()
