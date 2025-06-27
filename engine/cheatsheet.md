@@ -11,7 +11,7 @@
 
 [Close a window, and clean the vulkan context]()
 
-`close_window :: () -> ()`
+`destroy_window :: () -> ()`
 
 [Maximise the window, seems to keep current resoloution]()
 
@@ -42,3 +42,20 @@
 [Check and destroy a tracking allocator]()
 
 `destroy_tracker :: (^mem.Tracking_Allocator) -> ()`
+
+ ## Input
+[Initialise input, to allow for binding keys]()
+
+`init :: (window: glfw.WindowHandle) -> ()`
+
+[Destroy input, deallocates maps used for binding input]()
+
+`destroy :: () -> ()`
+
+[Bind a Key to a procedure, procedure signature must be () -> ()]()
+
+`bind_key :: (key: Key, func: proc()) -> ()`
+
+[Bind a key to tow functions which will alternate, helpful for on off functionality]()
+
+`bind_toggle :: (key: Key. first: proc(), second: proc()) -> ()`

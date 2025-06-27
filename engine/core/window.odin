@@ -17,7 +17,7 @@ odin_ctx: runtime.Context
 @(private)
 glfw_ctx: GLFW_Context
 
-init_window :: proc(width: i32, height: i32, title: string) {
+init_window :: proc(width: i32, height: i32, title: string) -> GLFW_Context {
 	odin_ctx = context
 	assert(glfw_ctx.window == nil)
 	glfw.Init()
@@ -29,6 +29,7 @@ init_window :: proc(width: i32, height: i32, title: string) {
 	assert(glfw_ctx.window != nil)
 	init_vulkan()
 	log.info("Initialised window")
+	return glfw_ctx
 }
 
 window_should_close :: proc() -> bool {
@@ -42,7 +43,7 @@ window_should_close :: proc() -> bool {
 	return bool(glfw.WindowShouldClose(glfw_ctx.window))
 }
 
-close_window :: proc() { 	// TODO: have a destroy vulkan function
+destroy_window :: proc() { 	// TODO: have a destroy vulkan function
 	assert(glfw_ctx.window != nil)
 	assert(vk_ctx.instance != nil)
 	vk_assert(vk.DeviceWaitIdle(vk_ctx.logical_device), "Failed to wait for synchronisation")
