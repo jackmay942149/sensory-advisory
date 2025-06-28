@@ -27,6 +27,7 @@ init :: proc(window: glfw.WindowHandle) {
 	input_ctx.initialised = true
 }
 
+@(require_results)
 init_mapping_ctx :: proc(window: glfw.WindowHandle) -> Mapping_Context {
 	assert(window != nil)
 	assert(input_ctx.initialised)
