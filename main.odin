@@ -30,8 +30,11 @@ main :: proc() {
 		core.destroy_tracker(tracker) // Do Last
 	}
 
+	key := input.Key{.P, {}, .Press}
 	for !core.window_should_close() {
-
+		if input.is_key_down(key) {
+			log.error("P is pressed")
+		}
 	}
 }
 
