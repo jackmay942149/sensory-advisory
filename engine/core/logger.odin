@@ -17,11 +17,13 @@ Logger_Topic :: enum {
 	Input,
 }
 
+@(private = "file")
 Logger_Context :: struct {
 	user:  Logger_User,
 	topic: Logger_Topic,
 }
 
+@(private = "file")
 logger_ctx: Logger_Context
 
 init_logger :: proc(
@@ -61,39 +63,83 @@ init_logger :: proc(
 	return logger
 }
 
-user_log :: proc(user: Logger_User, log_level := log.Level.Info, args: ..any) {
+@(disabled = RELEASE)
+user_debug :: proc(user: Logger_User, args: ..any) {
 	if logger_ctx.user != .All && user != logger_ctx.user && user != .All {
 		return
 	}
-	switch log_level {
-	case .Debug:
-		log.debug(user, ": ", args)
-	case .Info:
-		log.info(user, ": ", args)
-	case .Warning:
-		log.warn(user, ": ", args)
-	case .Error:
-		log.error(user, ": ", args)
-	case .Fatal:
-		log.fatal(user, ": ", args)
-	}
+	log.debug(user, ":", args)
 }
 
-topic_log :: proc(topic: Logger_Topic, log_level := log.Level.Info, args: ..any) {
+@(disabled = RELEASE)
+user_info :: proc(user: Logger_User, args: ..any) {
+	if logger_ctx.user != .All && user != logger_ctx.user && user != .All {
+		return
+	}
+	log.info(user, ":", args)
+}
+
+@(disabled = RELEASE)
+user_warn :: proc(user: Logger_User, args: ..any) {
+	if logger_ctx.user != .All && user != logger_ctx.user && user != .All {
+		return
+	}
+	log.warn(user, ":", args)
+}
+
+@(disabled = RELEASE)
+user_error :: proc(user: Logger_User, args: ..any) {
+	if logger_ctx.user != .All && user != logger_ctx.user && user != .All {
+		return
+	}
+	log.error(user, ":", args)
+}
+
+@(disabled = RELEASE)
+user_fatal :: proc(user: Logger_User, args: ..any) {
+	if logger_ctx.user != .All && user != logger_ctx.user && user != .All {
+		return
+	}
+	log.fatal(user, ":", args)
+}
+
+@(disabled = RELEASE)
+topic_debug :: proc(topic: Logger_Topic, args: ..any) {
 	if logger_ctx.topic != .All && topic != logger_ctx.topic && topic != .All {
 		return
 	}
-	switch log_level {
-	case .Debug:
-		log.debug(topic, ": ", args)
-	case .Info:
-		log.info(topic, ": ", args)
-	case .Warning:
-		log.warn(topic, ": ", args)
-	case .Error:
-		log.error(topic, ": ", args)
-	case .Fatal:
-		log.fatal(topic, ": ", args)
+	log.debug(topic, ":", args)
+}
+
+@(disabled = RELEASE)
+topic_info :: proc(topic: Logger_Topic, args: ..any) {
+	if logger_ctx.topic != .All && topic != logger_ctx.topic && topic != .All {
+		return
 	}
+	log.info(topic, ":", args)
+}
+
+@(disabled = RELEASE)
+topic_warn :: proc(topic: Logger_Topic, args: ..any) {
+	if logger_ctx.topic != .All && topic != logger_ctx.topic && topic != .All {
+		return
+	}
+	log.warn(topic, ":", args)
+}
+
+@(disabled = RELEASE)
+topic_error :: proc(topic: Logger_Topic, args: ..any) {
+	if logger_ctx.topic != .All && topic != logger_ctx.topic && topic != .All {
+		return
+	}
+	log.error(topic, ":", args)
+}
+
+@(disabled = RELEASE)
+topic_fatal :: proc(topic: Logger_Topic, args: ..any) {
+	if logger_ctx.topic != .All && topic != logger_ctx.topic && topic != .All {
+		return
+	}
+	log.fatal(topic, ":", args)
 }
 
