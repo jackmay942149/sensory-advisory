@@ -89,7 +89,7 @@ borderless_window :: proc() {
 
 set_window_title :: proc(title: string) {
 	c := strings.clone_to_cstring(title, context.allocator)
-	delete(c)
+	defer delete(c)
 	glfw.SetWindowTitle(glfw_ctx.window, c)
 }
 
