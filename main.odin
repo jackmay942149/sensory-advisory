@@ -19,7 +19,7 @@ main :: proc() {
 		core.delete_all_updates()
 		core.destroy_window()
 		input.destroy()
-		core.destroy_tracker(tracker) // Do Last
+		defer core.destroy_tracker(tracker)
 	}
 
 	for !core.window_should_close() {
