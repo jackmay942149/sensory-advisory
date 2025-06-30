@@ -1,4 +1,5 @@
 package input
+import "../../core"
 import "base:runtime"
 import "core:log"
 import "core:math/bits"
@@ -12,6 +13,10 @@ MAX_INPUT_KEYS :: 349 // From GLFW
 @(private)
 key_infos: [MAX_INPUT_KEYS]Key_Info
 
+// Gamepads
+@(private)
+gamepad_states: [glfw.JOYSTICK_LAST]Gamepad_Info
+
 // Note(Jack): The current input system uses a map to assign key binds,
 // this is used to reduce code complexity and gives the side effect of
 // binding a key overriding the old bind. An array would likely be more
@@ -24,6 +29,8 @@ init :: proc(window: glfw.WindowHandle) {
 	input_ctx.global_map.binds = make(map[Key]proc())
 	input_ctx.global_map.toggles = make(map[Key]Toggle)
 	glfw.SetKeyCallback(window, key_callback)
+	init_gamepads()
+	core.add_update_callback(update_gamepads)
 	input_ctx.initialised = true
 }
 
@@ -68,6 +75,39 @@ destroy :: proc(contexts: ..^Mapping_Context) {
 }
 
 @(private)
+joystick_callback :: proc "c" (a: i32, b: i32) {
+	context = input_ctx.odin_ctx
+	core.topic_info(.Input, a, b)
+}
+
+@(private)
+init_gamepads :: proc() {
+	for &g, i in gamepad_states {
+		if glfw.JoystickPresent(i32(i)) {
+			if glfw.JoystickIsGamepad(i32(i)) {
+				g.is_gamepad = true
+				g.initialised = true
+			}
+		}
+	}
+}
+
+@(private)
+update_gamepads :: proc() {
+	for &g, i in gamepad_states {
+		if !g.is_gamepad {
+			continue
+		}
+		g.prev_state = g.state
+		glfw.GetGamepadState(i32(i), &g.state)
+		for value, i in g.state.buttons {
+			if g.prev_state.buttons[i] == value do continue
+			input_callback(i32(i), -1, i32(value), 0)
+		}
+	}
+}
+
+@(private)
 key_callback :: proc "c" (
 	window: glfw.WindowHandle,
 	key_code: i32,
@@ -76,13 +116,19 @@ key_callback :: proc "c" (
 	mods: i32,
 ) {
 	context = input_ctx.odin_ctx
+	input_callback(key_code, scan_code, action, mods)
+}
+
+@(private)
+input_callback :: proc(key_code, scan_code, action, mods: i32) {
+	log.fatal(key_code, action, mods)
 	if action != glfw.REPEAT do key_infos[key_code].isDown = !key_infos[key_code].isDown
 	key := Key {
 		code     = transmute(Key_Code)key_code,
 		modifier = transmute(Key_Modifiers)mods,
 		action   = transmute(Key_Action)action,
 	}
-	if key in input_ctx.current_map.binds {
+	if input_ctx.current_map != nil && key in input_ctx.current_map.binds {
 		input_ctx.current_map.binds[key]()
 		if key in input_ctx.current_map.toggles {
 			if (input_ctx.current_map.binds[key] == input_ctx.current_map.toggles[key].first) {

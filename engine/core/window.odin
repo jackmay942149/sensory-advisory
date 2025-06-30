@@ -35,10 +35,6 @@ init_window :: proc(width: i32, height: i32, title: string) -> GLFW_Context {
 window_should_close :: proc() -> bool {
 	glfw.PollEvents()
 	draw_frame()
-
-	if glfw.GetKey(glfw_ctx.window, glfw.KEY_ESCAPE) == glfw.PRESS {
-		return true
-	}
 	vk_assert(vk.DeviceWaitIdle(vk_ctx.logical_device), "Failed to wait for synchronisation")
 	return bool(glfw.WindowShouldClose(glfw_ctx.window))
 }
@@ -91,5 +87,9 @@ set_window_title :: proc(title: string) {
 	c := strings.clone_to_cstring(title, context.allocator)
 	defer delete(c)
 	glfw.SetWindowTitle(glfw_ctx.window, c)
+}
+
+close_window :: proc() {
+	glfw.SetWindowShouldClose(glfw_ctx.window, true)
 }
 
