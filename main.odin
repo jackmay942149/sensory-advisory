@@ -29,7 +29,7 @@ main :: proc() {
 
 	for !core.window_should_close() {
 		core.update_callbacks()
-		input.inject_input_key(input.Key{.Escape, {}, .Press})
+		input.inject_key(input.Key{.Escape, {}, .Press})
 	}
 }
 

@@ -100,7 +100,7 @@ capture_cursor :: proc() {
 	glfw.SetInputMode(input_ctx.window, glfw.CURSOR, glfw.CURSOR_CAPTURED)
 }
 
-inject_input_key :: proc(key: Key) {
+inject_key :: proc(key: Key) {
 	input_callback(i32(key.code), i32(key.action), transmute(i32)key.modifier)
 }
 
