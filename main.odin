@@ -17,7 +17,6 @@ main :: proc() {
 	input.init(glfw_ctx.window)
 	input.bind_key(input.Key{.Gamepad_A, {}, .Press}, core.close_window)
 	input.bind_key(input.Key{.Escape, {}, .Press}, core.close_window)
-	input.disable_cursor()
 	defer {
 		core.delete_all_updates()
 		core.destroy_window()
@@ -29,7 +28,6 @@ main :: proc() {
 
 	for !core.window_should_close() {
 		core.update_callbacks()
-		input.inject_key(input.Key{.Escape, {}, .Press})
 	}
 }
 

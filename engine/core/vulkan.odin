@@ -973,6 +973,11 @@ vk_assert :: proc(attempt: vk.Result, message: string, loc := #caller_location) 
 
 @(private)
 recreate_swapchain :: proc() {
+	w, h := glfw.GetFramebufferSize(glfw_ctx.window)
+	for (w * h == 0) {
+		w, h = glfw.GetFramebufferSize(glfw_ctx.window)
+		glfw.WaitEvents()
+	}
 	vk.DeviceWaitIdle(vk_ctx.logical_device)
 	cleanup_swapchain(false)
 	create_swapchain()

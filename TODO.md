@@ -1,4 +1,4 @@
-Finish vulkan tutorial
+Finish vulkan tutorial - Vertex Buffers
 Open XR Tutorial
 Input recording Input injection for mouse input and gamepad input
 Testing
