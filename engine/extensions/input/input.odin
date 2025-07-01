@@ -19,9 +19,11 @@ init :: proc(window: glfw.WindowHandle) {
 	input_ctx.odin_ctx = context
 	input_ctx.global_map.binds = make(map[Key]proc())
 	input_ctx.global_map.toggles = make(map[Key]Toggle)
+	input_ctx.window = window
 	glfw.SetKeyCallback(window, key_callback)
 	init_gamepads()
 	core.add_update_callback(update_gamepads)
+	core.add_update_callback(update_mouse)
 	input_ctx.initialised = true
 }
 
@@ -72,6 +74,10 @@ get_axis_delta :: proc(axis: Axis) -> f32 {
 	return 0
 }
 
+get_mouse_pos :: proc() -> (f64, f64) {
+	return input_ctx.mouse_state.curr.pos.x, input_ctx.mouse_state.curr.pos.y
+}
+
 destroy :: proc(contexts: ..^Mapping_Context) {
 	assert(input_ctx.initialised)
 	for ctx in contexts {
@@ -108,6 +114,14 @@ update_gamepads :: proc() {
 			input_callback(i32(i), -1, i32(value), 0)
 		}
 	}
+}
+
+@(private)
+update_mouse :: proc() {
+	input_ctx.mouse_state.prev.pos = input_ctx.mouse_state.curr.pos
+	input_ctx.mouse_state.curr.pos.x, input_ctx.mouse_state.curr.pos.y = glfw.GetCursorPos(
+		input_ctx.window,
+	)
 }
 
 @(private)

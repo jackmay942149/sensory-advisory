@@ -146,11 +146,24 @@ Toggle :: struct {
 @(private)
 Input_Context :: struct {
 	odin_ctx:       runtime.Context,
+	window:         glfw.WindowHandle,
 	global_map:     Mapping_Context,
 	current_map:    ^Mapping_Context,
 	gamepad_states: [glfw.JOYSTICK_LAST]Gamepad_Info,
 	key_states:     [glfw.KEY_LAST + 1]Key_Info,
+	mouse_state:    Mouse_Info,
 	initialised:    bool,
+}
+
+@(private)
+Mouse_Info :: struct {
+	prev: Mouse_State,
+	curr: Mouse_State,
+}
+
+@(private)
+Mouse_State :: struct {
+	pos: [2]f64,
 }
 
 @(private)
