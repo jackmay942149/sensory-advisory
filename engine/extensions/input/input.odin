@@ -75,7 +75,33 @@ get_axis_delta :: proc(axis: Axis) -> f32 {
 }
 
 get_mouse_pos :: proc() -> (f64, f64) {
-	return input_ctx.mouse_state.curr.pos.x, input_ctx.mouse_state.curr.pos.y
+	using input_ctx.mouse_state.curr
+	return pos.x, pos.y
+}
+
+get_mouse_delta :: proc() -> (f64, f64) {
+	using input_ctx.mouse_state
+	return curr.pos.x - prev.pos.x, curr.pos.y - prev.pos.y
+}
+
+disable_cursor :: proc() {
+	glfw.SetInputMode(input_ctx.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+}
+
+show_cursor :: proc() {
+	glfw.SetInputMode(input_ctx.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
+}
+
+hide_cursor :: proc() {
+	glfw.SetInputMode(input_ctx.window, glfw.CURSOR, glfw.CURSOR_HIDDEN)
+}
+
+capture_cursor :: proc() {
+	glfw.SetInputMode(input_ctx.window, glfw.CURSOR, glfw.CURSOR_CAPTURED)
+}
+
+inject_input_key :: proc(key: Key) {
+	input_callback(i32(key.code), i32(key.action), transmute(i32)key.modifier)
 }
 
 destroy :: proc(contexts: ..^Mapping_Context) {
@@ -111,7 +137,7 @@ update_gamepads :: proc() {
 		glfw.GetGamepadState(i32(i), &g.state)
 		for value, i in g.state.buttons {
 			if g.prev_state.buttons[i] == value do continue
-			input_callback(i32(i), -1, i32(value), 0)
+			input_callback(i32(i), i32(value), 0)
 		}
 	}
 }
@@ -133,17 +159,18 @@ key_callback :: proc "c" (
 	mods: i32,
 ) {
 	context = input_ctx.odin_ctx
-	input_callback(key_code, scan_code, action, mods)
+	input_callback(key_code, action, mods)
 }
 
 @(private)
-input_callback :: proc(key_code, scan_code, action, mods: i32) {
+input_callback :: proc(key_code, action, mods: i32) { 	// TODO: Change this to accept a key
 	if action != glfw.REPEAT do input_ctx.key_states[key_code].isDown = !input_ctx.key_states[key_code].isDown
 	key := Key {
 		code     = transmute(Key_Code)key_code,
 		modifier = transmute(Key_Modifiers)mods,
 		action   = transmute(Key_Action)action,
 	}
+	core.topic_info(.Input, key.code, key.action)
 	if input_ctx.current_map != nil && key in input_ctx.current_map.binds {
 		input_ctx.current_map.binds[key]()
 		if key in input_ctx.current_map.toggles {

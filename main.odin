@@ -5,6 +5,7 @@ import "core:log"
 import "core:mem"
 import "engine/core"
 import "engine/extensions/input"
+import "vendor:glfw"
 
 main :: proc() {
 	when core.RELEASE == false {
@@ -16,7 +17,7 @@ main :: proc() {
 	input.init(glfw_ctx.window)
 	input.bind_key(input.Key{.Gamepad_A, {}, .Press}, core.close_window)
 	input.bind_key(input.Key{.Escape, {}, .Press}, core.close_window)
-
+	input.disable_cursor()
 	defer {
 		core.delete_all_updates()
 		core.destroy_window()
@@ -28,7 +29,7 @@ main :: proc() {
 
 	for !core.window_should_close() {
 		core.update_callbacks()
-		core.topic_info(.Input, input.get_mouse_pos())
+		input.inject_input_key(input.Key{.Escape, {}, .Press})
 	}
 }
 
