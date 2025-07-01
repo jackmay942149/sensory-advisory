@@ -8,15 +8,6 @@ import "vendor:glfw"
 @(private)
 input_ctx: Input_Context
 
-@(private)
-MAX_INPUT_KEYS :: 349 // From GLFW
-@(private)
-key_infos: [MAX_INPUT_KEYS]Key_Info
-
-// Gamepads
-@(private)
-gamepad_states: [glfw.JOYSTICK_LAST]Gamepad_Info
-
 // Note(Jack): The current input system uses a map to assign key binds,
 // this is used to reduce code complexity and gives the side effect of
 // binding a key overriding the old bind. An array would likely be more
@@ -60,11 +51,11 @@ bind_mapping_ctx :: proc(ctx: ^Mapping_Context) {
 }
 
 is_key_down :: proc(key: Key) -> bool {
-	return key_infos[key.code].isDown
+	return input_ctx.key_states[key.code].isDown
 }
 
 get_axis :: proc(axis: Axis) -> f32 {
-	for g, i in gamepad_states {
+	for g, i in input_ctx.gamepad_states {
 		if g.initialised {
 			return g.state.axes[axis]
 		}
@@ -73,7 +64,7 @@ get_axis :: proc(axis: Axis) -> f32 {
 }
 
 get_axis_delta :: proc(axis: Axis) -> f32 {
-	for g, i in gamepad_states {
+	for g, i in input_ctx.gamepad_states {
 		if g.initialised {
 			return g.state.axes[axis] - g.prev_state.axes[axis]
 		}
@@ -94,7 +85,7 @@ destroy :: proc(contexts: ..^Mapping_Context) {
 
 @(private)
 init_gamepads :: proc() {
-	for &g, i in gamepad_states {
+	for &g, i in input_ctx.gamepad_states {
 		if glfw.JoystickPresent(i32(i)) {
 			if glfw.JoystickIsGamepad(i32(i)) {
 				g.is_gamepad = true
@@ -106,7 +97,7 @@ init_gamepads :: proc() {
 
 @(private)
 update_gamepads :: proc() {
-	for &g, i in gamepad_states {
+	for &g, i in input_ctx.gamepad_states {
 		if !g.is_gamepad {
 			continue
 		}
@@ -133,7 +124,7 @@ key_callback :: proc "c" (
 
 @(private)
 input_callback :: proc(key_code, scan_code, action, mods: i32) {
-	if action != glfw.REPEAT do key_infos[key_code].isDown = !key_infos[key_code].isDown
+	if action != glfw.REPEAT do input_ctx.key_states[key_code].isDown = !input_ctx.key_states[key_code].isDown
 	key := Key {
 		code     = transmute(Key_Code)key_code,
 		modifier = transmute(Key_Modifiers)mods,

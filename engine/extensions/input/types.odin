@@ -145,10 +145,12 @@ Toggle :: struct {
 
 @(private)
 Input_Context :: struct {
-	odin_ctx:    runtime.Context,
-	global_map:  Mapping_Context,
-	current_map: ^Mapping_Context,
-	initialised: bool,
+	odin_ctx:       runtime.Context,
+	global_map:     Mapping_Context,
+	current_map:    ^Mapping_Context,
+	gamepad_states: [glfw.JOYSTICK_LAST]Gamepad_Info,
+	key_states:     [glfw.KEY_LAST + 1]Key_Info,
+	initialised:    bool,
 }
 
 @(private)

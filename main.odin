@@ -28,7 +28,6 @@ main :: proc() {
 
 	for !core.window_should_close() {
 		core.update_callbacks()
-		core.topic_info(.Input, input.get_axis(.Left_X))
 	}
 }
 
