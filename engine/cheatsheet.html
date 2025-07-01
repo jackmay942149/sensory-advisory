@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<body class="bg-slate-950 text-white px-12">
+  <title class="text-center">Engine Cheetsheet</title>
+  <p class="text-center text-xl leading-10">Engine Cheetsheet</p>
+  <p class="text-left text-xs">
+    This is the documentation form my engine project.
+    This project is inspired by raylib and is setup like a framework and provides functions for you to quickly get started on making stuff.
+    My goal for this project is to have something thats simple enough to use for a game jam, feature rich enough to work on VR applications for my freelance work, and adaptable enough to work on my own creative pursuits.
+    This project uses a variety of tools including; odin programming language, vulkan graphics api, glfw windowing library, and openXR virtual reality api.
+    The engine is structured in a way that allows basic applications to be made using the core-library.
+    The engine also includes extension packages which can be removed if not in use.
+    The engine's  code is designed to be copied into a project so it can be read and manipulated as required.
+    Extension modules are NOT considered as independent packages and may rely on core, however they have been designed in a way to only have a dependency on core and not other extension modules
+  </p>
+  <p class="text-center text-xl">Core</p>
+  <p class="text-left text-xs">
+    Core includes many functions that are 'core' to creating applications and provide functionality that the extension modules use. The function interface is given below and there will be an example of a basic application in the examples folder.
+  </p>
+  <p class="text-center">Tracker</p>
+  <div class="text-left text-xs">
+    <i>init_tracker :: proc() -> (^mem.Tracking_Allocator, mem.Allocator)</i><br>
+    - provides a tracking allocator and its backing which will provide informative logs if an allocation is made and not freed.<br>
+    <i>check_tracker :: proc(tracker: ^mem.Tracking_Allocator)<br></i>
+    - checkes a tracker to see if it has any allocations not freed or any double frees<br>
+    <i>destroy_tracker :: proc(tracker: ^mem.Tracking_Allocator)<br></i>
+    - checks a tracking allocator, asserts there is no current allocations or has been and double frees and then destroys the allocator<br>
+  </div>
+  <p class="text-center">Logger</p>
+  <div class="text-left text-xs">info</div>
+  <p class="text-center">Window</p>
+  <div class="text-left text-xs">info</div>
+  <p class="text-center">Tracker</p>
+  <div class="text-left text-xs">info</div>
+  <p class="text-center">Config</p>
+  <div class="text-left text-xs">info</div>
+  <p class="text-center">Update</p>
+  <div class="text-left text-xs">info</div>
+</body>

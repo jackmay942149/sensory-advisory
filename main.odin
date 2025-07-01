@@ -7,9 +7,11 @@ import "engine/core"
 import "engine/extensions/input"
 
 main :: proc() {
-	context.logger = core.init_logger("./log.txt", .Jack, .All)
-	tracker: ^mem.Tracking_Allocator
-	tracker, context.allocator = core.init_tracker()
+	when core.RELEASE == false {
+		context.logger = core.init_logger("./log.txt", .Jack, .All)
+		tracker: ^mem.Tracking_Allocator
+		tracker, context.allocator = core.init_tracker()
+	}
 	glfw_ctx := core.init_window(1920 / 2, 1080 / 2, "Vulkan")
 	input.init(glfw_ctx.window)
 	input.bind_key(input.Key{.Gamepad_A, {}, .Press}, core.close_window)
@@ -19,11 +21,14 @@ main :: proc() {
 		core.delete_all_updates()
 		core.destroy_window()
 		input.destroy()
-		defer core.destroy_tracker(tracker)
+		defer when core.RELEASE == false {
+			core.destroy_tracker(tracker)
+		}
 	}
 
 	for !core.window_should_close() {
 		core.update_callbacks()
+		core.topic_info(.Input, input.get_axis(.Left_X))
 	}
 }
 

@@ -63,6 +63,24 @@ is_key_down :: proc(key: Key) -> bool {
 	return key_infos[key.code].isDown
 }
 
+get_axis :: proc(axis: Axis) -> f32 {
+	for g, i in gamepad_states {
+		if g.initialised {
+			return g.state.axes[axis]
+		}
+	}
+	return 0
+}
+
+get_axis_delta :: proc(axis: Axis) -> f32 {
+	for g, i in gamepad_states {
+		if g.initialised {
+			return g.state.axes[axis] - g.prev_state.axes[axis]
+		}
+	}
+	return 0
+}
+
 destroy :: proc(contexts: ..^Mapping_Context) {
 	assert(input_ctx.initialised)
 	for ctx in contexts {
@@ -72,12 +90,6 @@ destroy :: proc(contexts: ..^Mapping_Context) {
 	delete(input_ctx.global_map.toggles)
 	delete(input_ctx.global_map.binds)
 	input_ctx.initialised = false
-}
-
-@(private)
-joystick_callback :: proc "c" (a: i32, b: i32) {
-	context = input_ctx.odin_ctx
-	core.topic_info(.Input, a, b)
 }
 
 @(private)
@@ -121,7 +133,6 @@ key_callback :: proc "c" (
 
 @(private)
 input_callback :: proc(key_code, scan_code, action, mods: i32) {
-	log.fatal(key_code, action, mods)
 	if action != glfw.REPEAT do key_infos[key_code].isDown = !key_infos[key_code].isDown
 	key := Key {
 		code     = transmute(Key_Code)key_code,

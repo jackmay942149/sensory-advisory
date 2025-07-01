@@ -9,6 +9,15 @@ Key :: struct {
 	action:   Key_Action,
 }
 
+Axis :: enum {
+	Left_X    = glfw.GAMEPAD_AXIS_LEFT_X,
+	Left_Y    = glfw.GAMEPAD_AXIS_LEFT_Y,
+	Right_X   = glfw.GAMEPAD_AXIS_RIGHT_X,
+	Right_Y   = glfw.GAMEPAD_AXIS_RIGHT_Y,
+	Trigger_L = glfw.GAMEPAD_AXIS_LEFT_TRIGGER,
+	Trigger_R = glfw.GAMEPAD_AXIS_RIGHT_TRIGGER,
+}
+
 Mapping_Context :: struct {
 	toggles: map[Key]Toggle,
 	binds:   map[Key]proc(),
