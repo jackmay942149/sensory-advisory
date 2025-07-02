@@ -30,6 +30,8 @@ Vulkan_Context :: struct {
 	command_pool:              vk.CommandPool,
 	vertex_buffer:             vk.Buffer,
 	vertex_buffer_memory:      vk.DeviceMemory,
+	index_buffer:              vk.Buffer,
+	index_buffer_memory:       vk.DeviceMemory,
 	command_buffer:            vk.CommandBuffer,
 	image_avail_semaphore:     vk.Semaphore,
 	render_finished_semaphore: vk.Semaphore,
@@ -41,8 +43,19 @@ Vertex :: struct {
 	color: [3]f32,
 }
 
+//odinfmt:disable
+vertices := [?]Vertex {
+	{{-0.5, -0.5}, {1, 0, 0}},
+	{{ 0.5, -0.5}, {0, 1, 0}},
+	{{ 0.5,  0.5}, {0, 0, 1}},
+	{{-0.5,  0.5}, {1, 1, 1}},
+}
 
-vertices := [?]Vertex{{{0, -0.5}, {1, 0, 1}}, {{0.5, 0.5}, {1, 0, 1}}, {{-0.5, 0.5}, {1, 0, 1}}}
+indicies := [?]u32 {
+	0, 1, 2,
+	2, 3, 0,
+}
+//odinfmt:enable
 
 @(private)
 vk_ctx: Vulkan_Context
@@ -75,6 +88,7 @@ init_vulkan :: proc() { 	// TODO: make these functions return elements of the co
 	create_framebuffers()
 	create_command_pool()
 	create_vertex_buffer()
+	create_index_buffer()
 	create_command_buffer()
 	create_sync_objects()
 }
@@ -871,6 +885,7 @@ record_command_buffer :: proc(command_buffer: vk.CommandBuffer, image_index: u32
 	vertex_buffer := [?]vk.Buffer{vk_ctx.vertex_buffer}
 	offsets := [?]vk.DeviceSize{0}
 	vk.CmdBindVertexBuffers(command_buffer, 0, 1, raw_data(vertex_buffer[:]), raw_data(offsets[:]))
+	vk.CmdBindIndexBuffer(command_buffer, vk_ctx.index_buffer, 0, .UINT32)
 
 	viewport := vk.Viewport {
 		x        = 0,
@@ -887,7 +902,7 @@ record_command_buffer :: proc(command_buffer: vk.CommandBuffer, image_index: u32
 		extent = vk_ctx.swapchain_extent,
 	}
 	vk.CmdSetScissor(command_buffer, 0, 1, &scissor)
-	vk.CmdDraw(command_buffer, len(vertices), 1, 0, 0)
+	vk.CmdDrawIndexed(command_buffer, len(indicies), 1, 0, 0, 0)
 	vk.CmdEndRenderPass(command_buffer)
 	if (vk.EndCommandBuffer(command_buffer) != .SUCCESS) {
 		log.fatal("Failed to record command buffer")
@@ -1135,6 +1150,35 @@ create_vertex_buffer :: proc() {
 		&vk_ctx.vertex_buffer_memory,
 	)
 	copy_buffer(staging_buffer, vk_ctx.vertex_buffer, buffer_size)
+	vk.DestroyBuffer(vk_ctx.logical_device, staging_buffer, nil)
+	vk.FreeMemory(vk_ctx.logical_device, staging_buffer_memory, nil)
+}
+
+@(private)
+create_index_buffer :: proc() {
+	buffer_size: vk.DeviceSize = size_of(u32) * len(indicies)
+	staging_buffer: vk.Buffer
+	staging_buffer_memory: vk.DeviceMemory
+	create_buffer(
+		buffer_size,
+		{.TRANSFER_SRC},
+		{.HOST_VISIBLE, .HOST_COHERENT},
+		&staging_buffer,
+		&staging_buffer_memory,
+	)
+
+	data: rawptr
+	vk.MapMemory(vk_ctx.logical_device, staging_buffer_memory, 0, buffer_size, {}, &data)
+	mem.copy(data, &indicies, int(buffer_size))
+	vk.UnmapMemory(vk_ctx.logical_device, staging_buffer_memory)
+	create_buffer(
+		buffer_size,
+		{.TRANSFER_DST, .INDEX_BUFFER},
+		{.DEVICE_LOCAL},
+		&vk_ctx.index_buffer,
+		&vk_ctx.index_buffer_memory,
+	)
+	copy_buffer(staging_buffer, vk_ctx.index_buffer, buffer_size)
 	vk.DestroyBuffer(vk_ctx.logical_device, staging_buffer, nil)
 	vk.FreeMemory(vk_ctx.logical_device, staging_buffer_memory, nil)
 }
