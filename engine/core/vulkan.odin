@@ -42,7 +42,7 @@ Vertex :: struct {
 }
 
 
-vertices := [?]Vertex{{{0, -0.5}, {1, 1, 1}}, {{0.5, 0.5}, {0, 1, 0}}, {{-0.5, 0.5}, {0, 0, 1}}}
+vertices := [?]Vertex{{{0, -0.5}, {1, 0, 1}}, {{0.5, 0.5}, {1, 0, 1}}, {{-0.5, 0.5}, {1, 0, 1}}}
 
 @(private)
 vk_ctx: Vulkan_Context
@@ -1062,44 +1062,37 @@ get_attribute_description :: proc() -> [2]vk.VertexInputAttributeDescription {
 }
 
 @(private)
-create_vertex_buffer :: proc() {
+create_buffer :: proc(
+	size: vk.DeviceSize,
+	usage: vk.BufferUsageFlags,
+	properties: vk.MemoryPropertyFlags,
+	buffer: ^vk.Buffer,
+	buffer_memory: ^vk.DeviceMemory,
+) {
 	info := vk.BufferCreateInfo {
 		sType       = .BUFFER_CREATE_INFO,
-		size        = size_of(vertices),
-		usage       = {.VERTEX_BUFFER},
+		size        = size,
+		usage       = usage,
 		sharingMode = .EXCLUSIVE,
 	}
 	vk_assert(
-		vk.CreateBuffer(vk_ctx.logical_device, &info, nil, &vk_ctx.vertex_buffer),
+		vk.CreateBuffer(vk_ctx.logical_device, &info, nil, buffer),
 		"Failed to create vertex buffer",
 	)
 
 	memory_reqs: vk.MemoryRequirements
-	vk.GetBufferMemoryRequirements(vk_ctx.logical_device, vk_ctx.vertex_buffer, &memory_reqs)
+	vk.GetBufferMemoryRequirements(vk_ctx.logical_device, buffer^, &memory_reqs)
 
 	alloc_info := vk.MemoryAllocateInfo {
 		sType           = .MEMORY_ALLOCATE_INFO,
 		allocationSize  = memory_reqs.size,
-		memoryTypeIndex = find_memory_type(
-			memory_reqs.memoryTypeBits,
-			{.HOST_VISIBLE, .HOST_COHERENT},
-		),
+		memoryTypeIndex = find_memory_type(memory_reqs.memoryTypeBits, properties),
 	}
 	vk_assert(
-		vk.AllocateMemory(vk_ctx.logical_device, &alloc_info, nil, &vk_ctx.vertex_buffer_memory),
+		vk.AllocateMemory(vk_ctx.logical_device, &alloc_info, nil, buffer_memory),
 		"Failed to allocate memory for the vertex buffer",
 	)
-	vk.BindBufferMemory(
-		vk_ctx.logical_device,
-		vk_ctx.vertex_buffer,
-		vk_ctx.vertex_buffer_memory,
-		0,
-	)
-
-	data: rawptr
-	vk.MapMemory(vk_ctx.logical_device, vk_ctx.vertex_buffer_memory, 0, info.size, {}, &data)
-	mem.copy(data, &vertices, int(info.size))
-	vk.UnmapMemory(vk_ctx.logical_device, vk_ctx.vertex_buffer_memory)
+	vk.BindBufferMemory(vk_ctx.logical_device, buffer^, buffer_memory^, 0)
 }
 
 @(private)
@@ -1115,5 +1108,66 @@ find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -
 	}
 	log.fatal("Failed to find a suitable memory type")
 	return 0
+}
+
+@(private)
+create_vertex_buffer :: proc() {
+	buffer_size: vk.DeviceSize = size_of(Vertex) * len(vertices)
+	staging_buffer: vk.Buffer
+	staging_buffer_memory: vk.DeviceMemory
+	create_buffer(
+		buffer_size,
+		{.TRANSFER_SRC},
+		{.HOST_VISIBLE, .HOST_COHERENT},
+		&staging_buffer,
+		&staging_buffer_memory,
+	)
+
+	data: rawptr
+	vk.MapMemory(vk_ctx.logical_device, staging_buffer_memory, 0, buffer_size, {}, &data)
+	mem.copy(data, &vertices, int(buffer_size))
+	vk.UnmapMemory(vk_ctx.logical_device, staging_buffer_memory)
+	create_buffer(
+		buffer_size,
+		{.TRANSFER_DST, .VERTEX_BUFFER},
+		{.DEVICE_LOCAL},
+		&vk_ctx.vertex_buffer,
+		&vk_ctx.vertex_buffer_memory,
+	)
+	copy_buffer(staging_buffer, vk_ctx.vertex_buffer, buffer_size)
+	vk.DestroyBuffer(vk_ctx.logical_device, staging_buffer, nil)
+	vk.FreeMemory(vk_ctx.logical_device, staging_buffer_memory, nil)
+}
+
+@(private)
+copy_buffer :: proc(src, dest: vk.Buffer, size: vk.DeviceSize) {
+	alloc_info := vk.CommandBufferAllocateInfo {
+		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
+		level              = .PRIMARY,
+		commandPool        = vk_ctx.command_pool,
+		commandBufferCount = 1,
+	}
+	command_buffer: vk.CommandBuffer
+	vk.AllocateCommandBuffers(vk_ctx.logical_device, &alloc_info, &command_buffer)
+	begin_info := vk.CommandBufferBeginInfo {
+		sType = .COMMAND_BUFFER_BEGIN_INFO,
+		flags = {.ONE_TIME_SUBMIT},
+	}
+	vk.BeginCommandBuffer(command_buffer, &begin_info)
+	copy_region := vk.BufferCopy {
+		srcOffset = 0,
+		dstOffset = 0,
+		size      = size,
+	}
+	vk.CmdCopyBuffer(command_buffer, src, dest, 1, &copy_region)
+	vk.EndCommandBuffer(command_buffer)
+	submit_info := vk.SubmitInfo {
+		sType              = .SUBMIT_INFO,
+		commandBufferCount = 1,
+		pCommandBuffers    = &command_buffer,
+	}
+	vk.QueueSubmit(vk_ctx.graphics_queue, 1, &submit_info, 0)
+	vk.QueueWaitIdle(vk_ctx.graphics_queue)
+	vk.FreeCommandBuffers(vk_ctx.logical_device, vk_ctx.command_pool, 1, &command_buffer)
 }
 
