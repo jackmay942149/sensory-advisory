@@ -33,10 +33,24 @@ Vulkan_Context :: struct {
 	in_flight_fence:           vk.Fence,
 }
 
+Vertex :: struct {
+	pos:   [2]f32,
+	color: [3]f32,
+}
+
+vertices :: []Vertex{{{0, 0.5}, {1, 0, 0}}, {{0.5, 0.5}, {0, 1, 0}}, {{-0.5, 0.5}, {0, 0, 1}}}
+
 @(private)
 vk_ctx: Vulkan_Context
-@(private)
-p_req_validation_layers :: []cstring{"VK_LAYER_KHRONOS_validation"}
+
+when VALIDATION_LAYERS == false {
+	@(private)
+	p_req_validation_layers :: []cstring{}
+} else {
+	@(private)
+	p_req_validation_layers :: []cstring{"VK_LAYER_KHRONOS_validation"}
+}
+
 @(private)
 p_device_extensions :: []cstring{"VK_KHR_swapchain"}
 
@@ -44,7 +58,9 @@ p_device_extensions :: []cstring{"VK_KHR_swapchain"}
 init_vulkan :: proc() { 	// TODO: make these functions return elements of the context, makes it more obvious its changing state
 	create_instance()
 	vk.load_proc_addresses_instance(vk_ctx.instance)
-	setup_debug_messenger()
+	when VALIDATION_LAYERS == true {
+		setup_debug_messenger()
+	}
 	create_surface()
 	pick_physical_device()
 	create_logical_device()
@@ -80,7 +96,6 @@ create_instance :: proc() {
 	get_required_extensions(&extensions)
 	log.info("Vulkan extensions required:", extensions)
 
-	debug_info: vk.DebugUtilsMessengerCreateInfoEXT
 	info := vk.InstanceCreateInfo {
 		sType                   = .INSTANCE_CREATE_INFO,
 		pApplicationInfo        = &app_info,
@@ -90,8 +105,12 @@ create_instance :: proc() {
 		ppEnabledLayerNames     = raw_data(p_req_validation_layers),
 	}
 
-	populate_debug_messenger_create_info(&debug_info)
-	info.pNext = &debug_info
+	when VALIDATION_LAYERS == true {
+		debug_info: vk.DebugUtilsMessengerCreateInfoEXT
+
+		populate_debug_messenger_create_info(&debug_info)
+		info.pNext = &debug_info
+	}
 
 	assert(vk.CreateInstance(&info, nil, &vk_ctx.instance) == .SUCCESS)
 }
