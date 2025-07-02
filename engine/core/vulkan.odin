@@ -1,6 +1,7 @@
 package core
 
 import "core:log"
+import "core:mem"
 import "core:os"
 import "core:slice"
 import "core:strings"
@@ -27,6 +28,8 @@ Vulkan_Context :: struct {
 	graphics_pipeline:         vk.Pipeline,
 	swapchain_framebuffers:    [dynamic]vk.Framebuffer,
 	command_pool:              vk.CommandPool,
+	vertex_buffer:             vk.Buffer,
+	vertex_buffer_memory:      vk.DeviceMemory,
 	command_buffer:            vk.CommandBuffer,
 	image_avail_semaphore:     vk.Semaphore,
 	render_finished_semaphore: vk.Semaphore,
@@ -38,7 +41,8 @@ Vertex :: struct {
 	color: [3]f32,
 }
 
-vertices :: []Vertex{{{0, 0.5}, {1, 0, 0}}, {{0.5, 0.5}, {0, 1, 0}}, {{-0.5, 0.5}, {0, 0, 1}}}
+
+vertices := [?]Vertex{{{0, -0.5}, {1, 1, 1}}, {{0.5, 0.5}, {0, 1, 0}}, {{-0.5, 0.5}, {0, 0, 1}}}
 
 @(private)
 vk_ctx: Vulkan_Context
@@ -70,6 +74,7 @@ init_vulkan :: proc() { 	// TODO: make these functions return elements of the co
 	create_graphics_pipeline()
 	create_framebuffers()
 	create_command_pool()
+	create_vertex_buffer()
 	create_command_buffer()
 	create_sync_objects()
 }
@@ -588,12 +593,15 @@ create_graphics_pipeline :: proc() {
 		pDynamicStates    = raw_data(dynamic_states[:]),
 	}
 
+	binding_description := get_binding_description()
+	attribute_descriptions := get_attribute_description()
+
 	vertex_input_info := vk.PipelineVertexInputStateCreateInfo {
 		sType                           = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		vertexBindingDescriptionCount   = 0,
-		pVertexBindingDescriptions      = nil,
-		vertexAttributeDescriptionCount = 0,
-		pVertexAttributeDescriptions    = nil,
+		vertexBindingDescriptionCount   = 1,
+		pVertexBindingDescriptions      = &binding_description,
+		vertexAttributeDescriptionCount = len(attribute_descriptions),
+		pVertexAttributeDescriptions    = raw_data(attribute_descriptions[:]),
 	}
 
 	input_assembley_info := vk.PipelineInputAssemblyStateCreateInfo {
@@ -859,6 +867,11 @@ record_command_buffer :: proc(command_buffer: vk.CommandBuffer, image_index: u32
 	vk.CmdBeginRenderPass(command_buffer, &render_pass_info, .INLINE)
 
 	vk.CmdBindPipeline(command_buffer, .GRAPHICS, vk_ctx.graphics_pipeline)
+
+	vertex_buffer := [?]vk.Buffer{vk_ctx.vertex_buffer}
+	offsets := [?]vk.DeviceSize{0}
+	vk.CmdBindVertexBuffers(command_buffer, 0, 1, raw_data(vertex_buffer[:]), raw_data(offsets[:]))
+
 	viewport := vk.Viewport {
 		x        = 0,
 		y        = 0,
@@ -874,7 +887,7 @@ record_command_buffer :: proc(command_buffer: vk.CommandBuffer, image_index: u32
 		extent = vk_ctx.swapchain_extent,
 	}
 	vk.CmdSetScissor(command_buffer, 0, 1, &scissor)
-	vk.CmdDraw(command_buffer, 3, 1, 0, 0)
+	vk.CmdDraw(command_buffer, len(vertices), 1, 0, 0)
 	vk.CmdEndRenderPass(command_buffer)
 	if (vk.EndCommandBuffer(command_buffer) != .SUCCESS) {
 		log.fatal("Failed to record command buffer")
@@ -1017,5 +1030,90 @@ cleanup_swapchain :: proc(closing_app: bool) {
 		delete(vk_ctx.swapchain_framebuffers)
 		delete(vk_ctx.swapchain_image_views)
 	}
+}
+
+
+@(private)
+get_binding_description :: proc() -> vk.VertexInputBindingDescription {
+	description := vk.VertexInputBindingDescription {
+		binding   = 0,
+		stride    = size_of(Vertex),
+		inputRate = .VERTEX,
+	}
+	return description
+}
+
+@(private)
+get_attribute_description :: proc() -> [2]vk.VertexInputAttributeDescription {
+	attributes: [2]vk.VertexInputAttributeDescription
+	attributes[0] = {
+		binding  = 0,
+		location = 0,
+		format   = .R32G32_SFLOAT,
+		offset   = u32(offset_of(Vertex, pos)),
+	}
+	attributes[1] = {
+		binding  = 0,
+		location = 1,
+		format   = .R32G32B32_SFLOAT,
+		offset   = u32(offset_of(Vertex, color)),
+	}
+	return attributes
+}
+
+@(private)
+create_vertex_buffer :: proc() {
+	info := vk.BufferCreateInfo {
+		sType       = .BUFFER_CREATE_INFO,
+		size        = size_of(vertices),
+		usage       = {.VERTEX_BUFFER},
+		sharingMode = .EXCLUSIVE,
+	}
+	vk_assert(
+		vk.CreateBuffer(vk_ctx.logical_device, &info, nil, &vk_ctx.vertex_buffer),
+		"Failed to create vertex buffer",
+	)
+
+	memory_reqs: vk.MemoryRequirements
+	vk.GetBufferMemoryRequirements(vk_ctx.logical_device, vk_ctx.vertex_buffer, &memory_reqs)
+
+	alloc_info := vk.MemoryAllocateInfo {
+		sType           = .MEMORY_ALLOCATE_INFO,
+		allocationSize  = memory_reqs.size,
+		memoryTypeIndex = find_memory_type(
+			memory_reqs.memoryTypeBits,
+			{.HOST_VISIBLE, .HOST_COHERENT},
+		),
+	}
+	vk_assert(
+		vk.AllocateMemory(vk_ctx.logical_device, &alloc_info, nil, &vk_ctx.vertex_buffer_memory),
+		"Failed to allocate memory for the vertex buffer",
+	)
+	vk.BindBufferMemory(
+		vk_ctx.logical_device,
+		vk_ctx.vertex_buffer,
+		vk_ctx.vertex_buffer_memory,
+		0,
+	)
+
+	data: rawptr
+	vk.MapMemory(vk_ctx.logical_device, vk_ctx.vertex_buffer_memory, 0, info.size, {}, &data)
+	mem.copy(data, &vertices, int(info.size))
+	vk.UnmapMemory(vk_ctx.logical_device, vk_ctx.vertex_buffer_memory)
+}
+
+@(private)
+find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -> u32 {
+	mem_properties: vk.PhysicalDeviceMemoryProperties
+	vk.GetPhysicalDeviceMemoryProperties(vk_ctx.physical_device, &mem_properties)
+
+	for i in 0 ..< mem_properties.memoryTypeCount {
+		if (type_filter & (1 << i) != 0) &&
+		   (mem_properties.memoryTypes[i].propertyFlags & properties == properties) {
+			return i
+		}
+	}
+	log.fatal("Failed to find a suitable memory type")
+	return 0
 }
 
