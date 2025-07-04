@@ -21,12 +21,12 @@ Vulkan_Context :: struct {
 	surface:                   vk.SurfaceKHR,
 	presentation_queue:        vk.Queue,
 	avail_extensions:          [dynamic]string,
-	swapchain:                 vk.SwapchainKHR,
+	swapchain:                 vk.SwapchainKHR, // Swapchain
 	swapchain_images:          [dynamic]vk.Image,
 	swapchain_image_format:    vk.Format,
 	swapchain_extent:          vk.Extent2D,
 	swapchain_image_views:     [dynamic]vk.ImageView,
-	render_pass:               vk.RenderPass,
+	render_pass:               vk.RenderPass, // Renderpass
 	descriptor_set_layout:     vk.DescriptorSetLayout,
 	pipeline_layout:           vk.PipelineLayout,
 	graphics_pipeline:         vk.Pipeline,
@@ -112,7 +112,7 @@ when VALIDATION_LAYERS == true {
 vulkan_info: Vulkan_Info
 
 @(private)
-init_vulkan :: proc() { 	// TODO: make these functions return elements of the context, makes it more obvious its changing state
+init_vulkan :: proc(window: glfw.WindowHandle) {
 	vk_ctx.start_time = time.now() // TODO: Remove
 	vulkan_info.odin_ctx = context
 	vk_ctx.instance = create_instance(app_info) // TODO: Switch to vulkan info
@@ -121,11 +121,11 @@ init_vulkan :: proc() { 	// TODO: make these functions return elements of the co
 		vk_ctx.debug_messenger = setup_validation(
 		vk_ctx.instance, // TODO: Switch to vulkan info
 		{.VERBOSE, .INFO, .WARNING, .ERROR},
-		{.GENERAL, .VALIDATION, .PERFORMANCE, .DEVICE_ADDRESS_BINDING},
+		{.GENERAL, .VALIDATION, .PERFORMANCE},
 		)
 	}
-	create_surface() // TODO: abstract better
 	vk_ctx.physical_device = get_physical_device(vk_ctx.instance) // TODO: switch to vulkan info
+	vk_ctx.surface = create_surface(vk_ctx.instance, window) // TODO: Change to vulkan info
 	create_logical_device()
 	create_swapchain()
 	create_image_views()
@@ -355,14 +355,6 @@ create_logical_device :: proc() {
 		&vk_ctx.presentation_queue,
 	)
 	assert(vk_ctx.presentation_queue != nil)
-}
-
-@(private)
-create_surface :: proc() {
-	if glfw.CreateWindowSurface(vk_ctx.instance, glfw_ctx.window, nil, &vk_ctx.surface) !=
-	   .SUCCESS {
-		log.fatal("Failed to create window surface")
-	}
 }
 
 @(private)

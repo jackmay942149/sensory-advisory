@@ -14,6 +14,7 @@ Logger_Topic :: enum {
 	All,
 	Core,
 	Graphics,
+	Vulkan_Validation,
 	Input,
 }
 
