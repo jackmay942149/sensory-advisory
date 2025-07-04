@@ -46,6 +46,7 @@ destroy_window :: proc() { 	// TODO: have a destroy vulkan function
 	delete(vk_ctx.avail_extensions)
 	delete(vk_ctx.avail_validation_layers)
 	cleanup_swapchain(true)
+	vk.DestroyDescriptorSetLayout(vk_ctx.logical_device, vk_ctx.descriptor_set_layout, nil)
 	vk.DestroySemaphore(vk_ctx.logical_device, vk_ctx.image_avail_semaphore, nil)
 	vk.DestroySemaphore(vk_ctx.logical_device, vk_ctx.render_finished_semaphore, nil)
 	vk.DestroyFence(vk_ctx.logical_device, vk_ctx.in_flight_fence, nil)

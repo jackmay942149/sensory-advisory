@@ -1,10 +1,13 @@
 package core
 
 import "core:log"
+import "core:math"
+import "core:math/linalg"
 import "core:mem"
 import "core:os"
 import "core:slice"
 import "core:strings"
+import "core:time"
 import "vendor:glfw"
 import vk "vendor:vulkan"
 
@@ -24,6 +27,7 @@ Vulkan_Context :: struct {
 	swapchain_extent:          vk.Extent2D,
 	swapchain_image_views:     [dynamic]vk.ImageView,
 	render_pass:               vk.RenderPass,
+	descriptor_set_layout:     vk.DescriptorSetLayout,
 	pipeline_layout:           vk.PipelineLayout,
 	graphics_pipeline:         vk.Pipeline,
 	swapchain_framebuffers:    [dynamic]vk.Framebuffer,
@@ -32,15 +36,25 @@ Vulkan_Context :: struct {
 	vertex_buffer_memory:      vk.DeviceMemory,
 	index_buffer:              vk.Buffer,
 	index_buffer_memory:       vk.DeviceMemory,
+	uniform_buffers:           [dynamic]vk.Buffer,
+	uniform_buffers_memory:    [dynamic]vk.DeviceMemory,
+	uniform_buffers_mapped:    [dynamic]rawptr,
 	command_buffer:            vk.CommandBuffer,
 	image_avail_semaphore:     vk.Semaphore,
 	render_finished_semaphore: vk.Semaphore,
 	in_flight_fence:           vk.Fence,
+	start_time:                time.Time,
 }
 
 Vertex :: struct {
 	pos:   [2]f32,
 	color: [3]f32,
+}
+
+UBO :: struct {
+	model: matrix[4, 4]f32,
+	view:  matrix[4, 4]f32,
+	proj:  matrix[4, 4]f32,
 }
 
 //odinfmt:disable
@@ -71,67 +85,60 @@ when VALIDATION_LAYERS == false {
 @(private)
 p_device_extensions :: []cstring{"VK_KHR_swapchain"}
 
+engine_info :: Engine_Info {
+	name        = "Wreckless",
+	version     = vk.API_VERSION_1_0,
+	api_version = vk.API_VERSION_1_0,
+}
+
+when VALIDATION_LAYERS == true {
+	app_info :: App_Info {
+		name              = "Sensory Advisory",
+		version           = vk.API_VERSION_1_0,
+		engine            = engine_info,
+		req_global_ext    = {"VK_KHR_surface", "VK_KHR_win32_surface", "VK_EXT_debug_utils"},
+		req_global_layers = {},
+	}
+} else {
+	app_info :: App_Info {
+		name              = "Sensory Advisory",
+		version           = vk.API_VERSION_1_0,
+		engine            = engine_info,
+		req_global_ext    = {"VK_KHR_surface", "VK_KHR_win32_surface"},
+		req_global_layers = {},
+	}
+}
+
+vulkan_info: Vulkan_Info
+
 @(private)
 init_vulkan :: proc() { 	// TODO: make these functions return elements of the context, makes it more obvious its changing state
-	create_instance()
+	vk_ctx.start_time = time.now() // TODO: Remove
+	vulkan_info.odin_ctx = context
+	vk_ctx.instance = create_instance(app_info) // TODO: Switch to vulkan info
 	vk.load_proc_addresses_instance(vk_ctx.instance)
 	when VALIDATION_LAYERS == true {
-		setup_debug_messenger()
+		vk_ctx.debug_messenger = setup_validation(
+		vk_ctx.instance, // TODO: Switch to vulkan info
+		{.VERBOSE, .INFO, .WARNING, .ERROR},
+		{.GENERAL, .VALIDATION, .PERFORMANCE, .DEVICE_ADDRESS_BINDING},
+		)
 	}
-	create_surface()
-	pick_physical_device()
+	create_surface() // TODO: abstract better
+	vk_ctx.physical_device = get_physical_device(vk_ctx.instance) // TODO: switch to vulkan info
 	create_logical_device()
 	create_swapchain()
 	create_image_views()
 	create_render_pass()
+	create_descriptor_set_layout()
 	create_graphics_pipeline()
 	create_framebuffers()
 	create_command_pool()
 	create_vertex_buffer()
 	create_index_buffer()
+	// create_uniform_buffers()
 	create_command_buffer()
 	create_sync_objects()
-}
-
-@(private)
-create_instance :: proc() {
-	// Load function pointers check odin example for this
-	vk.load_proc_addresses_global(rawptr(glfw.GetInstanceProcAddress))
-	assert(vk.CreateInstance != nil)
-
-	check_validation_layer()
-
-	app_info := vk.ApplicationInfo {
-		sType              = .APPLICATION_INFO,
-		pApplicationName   = "Hello Triangle",
-		applicationVersion = vk.MAKE_VERSION(1, 0, 0),
-		pEngineName        = "No Engine",
-		engineVersion      = vk.MAKE_VERSION(1, 0, 0),
-		apiVersion         = vk.API_VERSION_1_0,
-	}
-
-	extensions: [dynamic]cstring
-	defer delete(extensions)
-	get_required_extensions(&extensions)
-	log.info("Vulkan extensions required:", extensions)
-
-	info := vk.InstanceCreateInfo {
-		sType                   = .INSTANCE_CREATE_INFO,
-		pApplicationInfo        = &app_info,
-		enabledExtensionCount   = u32(len(extensions)),
-		ppEnabledExtensionNames = raw_data(extensions),
-		enabledLayerCount       = u32(len(p_req_validation_layers)),
-		ppEnabledLayerNames     = raw_data(p_req_validation_layers),
-	}
-
-	when VALIDATION_LAYERS == true {
-		debug_info: vk.DebugUtilsMessengerCreateInfoEXT
-
-		populate_debug_messenger_create_info(&debug_info)
-		info.pNext = &debug_info
-	}
-
-	assert(vk.CreateInstance(&info, nil, &vk_ctx.instance) == .SUCCESS)
 }
 
 @(private)
@@ -166,7 +173,7 @@ get_required_extensions :: proc(extensions: ^[dynamic]cstring) {
 	append(extensions, cstr)
 }
 
-@(private)
+@(private = "file")
 debug_callback :: proc "system" (
 	severity: vk.DebugUtilsMessageSeverityFlagsEXT,
 	type: vk.DebugUtilsMessageTypeFlagsEXT,
@@ -690,8 +697,8 @@ create_graphics_pipeline :: proc() {
 
 	pipeline_layout_info := vk.PipelineLayoutCreateInfo {
 		sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
-		setLayoutCount         = 0,
-		pSetLayouts            = nil,
+		setLayoutCount         = 1,
+		pSetLayouts            = &vk_ctx.descriptor_set_layout,
 		pushConstantRangeCount = 0,
 		pPushConstantRanges    = nil,
 	}
@@ -966,6 +973,8 @@ draw_frame :: proc() { 	// TODO: put this as a public window function
 
 	vk.ResetFences(vk_ctx.logical_device, 1, &vk_ctx.in_flight_fence)
 
+	//update_uniform_buffer(image_index)
+
 	vk_assert(vk.ResetCommandBuffer(vk_ctx.command_buffer, {}), "Failed to reset command buffer")
 	record_command_buffer(vk_ctx.command_buffer, image_index)
 
@@ -1213,5 +1222,55 @@ copy_buffer :: proc(src, dest: vk.Buffer, size: vk.DeviceSize) {
 	vk.QueueSubmit(vk_ctx.graphics_queue, 1, &submit_info, 0)
 	vk.QueueWaitIdle(vk_ctx.graphics_queue)
 	vk.FreeCommandBuffers(vk_ctx.logical_device, vk_ctx.command_pool, 1, &command_buffer)
+}
+
+@(private)
+create_descriptor_set_layout :: proc() {
+	ubo_layout_binding := vk.DescriptorSetLayoutBinding {
+		binding            = 0,
+		descriptorType     = .UNIFORM_BUFFER,
+		descriptorCount    = 1,
+		stageFlags         = {.VERTEX},
+		pImmutableSamplers = nil,
+	}
+	layout_info := vk.DescriptorSetLayoutCreateInfo {
+		sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		bindingCount = 1,
+		pBindings    = &ubo_layout_binding,
+	}
+	vk_assert(
+		vk.CreateDescriptorSetLayout(
+			vk_ctx.logical_device,
+			&layout_info,
+			nil,
+			&vk_ctx.descriptor_set_layout,
+		),
+		"Failed to create descriptor set layout",
+	)
+}
+
+@(private)
+create_uniform_buffer :: proc() {
+	buffer_size := size_of(UBO)
+	vk_ctx.uniform_buffers = make([dynamic]vk.Buffer, 5)
+}
+
+@(private)
+update_uniform_buffer :: proc(image: u32) {
+	curr_time := time.now()
+	time_running := time.duration_milliseconds(time.diff(vk_ctx.start_time, curr_time))
+	ubo: UBO
+	ubo.model = linalg.matrix4_rotate_f32(f32(time_running), [3]f32{0, 0, 1})
+	ubo.view = linalg.matrix4_look_at_f32([3]f32{2, 2, 2}, [3]f32{0, 0, 0}, [3]f32{0, 0, 1})
+	ubo.proj = linalg.matrix4_perspective_f32(
+		math.to_radians_f32(45),
+		f32(vk_ctx.swapchain_extent.width / vk_ctx.swapchain_extent.height),
+		.1,
+		10,
+	)
+	if len(vk_ctx.uniform_buffers_mapped) <= int(image) {
+		vk_ctx.uniform_buffers_mapped = make([dynamic]rawptr, image + 1)
+	}
+	mem.copy(vk_ctx.uniform_buffers_mapped[image], &ubo, size_of(UBO))
 }
 

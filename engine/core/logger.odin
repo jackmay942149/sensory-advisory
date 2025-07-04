@@ -141,5 +141,6 @@ topic_fatal :: proc(topic: Logger_Topic, args: ..any) {
 		return
 	}
 	log.fatal(topic, ":", args)
+	assert(false)
 }
 
