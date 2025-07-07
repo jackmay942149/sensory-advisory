@@ -7,9 +7,11 @@ import vk "vendor:vulkan"
 Vulkan_Info :: struct {
 	odin_ctx:        runtime.Context,
 	instance:        vk.Instance,
+	debug_messenger: vk.DebugUtilsMessengerEXT,
 	physical_device: vk.PhysicalDevice,
 	surface:         vk.SurfaceKHR,
 	logical_device:  vk.Device,
+	queues:          []vk.Queue,
 }
 
 App_Info :: struct {
@@ -18,6 +20,7 @@ App_Info :: struct {
 	engine:            Engine_Info,
 	req_global_ext:    []cstring,
 	req_global_layers: []cstring,
+	req_device_ext:    []cstring,
 }
 
 Engine_Info :: struct {
@@ -122,9 +125,28 @@ get_physical_device :: proc(instance: vk.Instance) -> (physical_device: vk.Physi
 @(private = "file")
 rate_physical_devices :: proc(devices: ^[]vk.PhysicalDevice) -> (best: vk.PhysicalDevice) {
 	// TODO: Make a rating system
+	topic_info(.Graphics, "Rating", len(devices), "physical devices")
+	for d in devices {
+		count, queues := query_queue_info(d)
+		defer delete(queues)
+		topic_info(.Graphics, "Device", d, "has", count, "queues with properties", queues)
+	}
 	assert(len(devices) > 0)
 	best = devices[0]
 	return best
+}
+
+@(private = "file", require_results)
+query_queue_info :: proc(
+	device: vk.PhysicalDevice,
+) -> (
+	count: u32,
+	properties: []vk.QueueFamilyProperties,
+) {
+	vk.GetPhysicalDeviceQueueFamilyProperties(device, &count, nil)
+	properties = make([]vk.QueueFamilyProperties, count)
+	vk.GetPhysicalDeviceQueueFamilyProperties(device, &count, raw_data(properties))
+	return count, properties
 }
 
 @(private, require_results)
@@ -140,15 +162,30 @@ create_surface :: proc(
 }
 
 @(private, require_results)
-create_logical_device :: proc(physical_device: vk.PhysicalDevice) -> (device: vk.Device) {
+create_logical_device_2 :: proc(
+	physical_device: vk.PhysicalDevice,
+	app_info: App_Info,
+) -> (
+	device: vk.Device,
+) {
+	queue_count, queues := query_queue_info(physical_device)
+	queue_create_infos := make([]vk.DeviceQueueCreateInfo, queue_count)
+	priority: f32 = 1
+	for _, i in queues {
+		info := vk.DeviceQueueCreateInfo {
+			sType            = .DEVICE_QUEUE_CREATE_INFO,
+			queueFamilyIndex = u32(i),
+			queueCount       = 1,
+			pQueuePriorities = &priority,
+		}
+		queue_create_infos[i] = info
+	}
 	info := vk.DeviceCreateInfo {
 		sType                   = .DEVICE_CREATE_INFO,
-		queueCreateInfoCount    = 0, // TODO:
-		pQueueCreateInfos       = nil, // TODO:
-		enabledLayerCount       = 0, // TODO:
-		ppEnabledLayerNames     = nil, // TODO:
-		enabledExtensionCount   = 0, // TODO:
-		ppEnabledExtensionNames = nil, // TODO:		
+		queueCreateInfoCount    = queue_count,
+		pQueueCreateInfos       = raw_data(queue_create_infos),
+		enabledExtensionCount   = u32(len(app_info.req_device_ext)),
+		ppEnabledExtensionNames = raw_data(app_info.req_device_ext),
 	}
 	result := vk.CreateDevice(physical_device, &info, nil, &device)
 	// TODO: this switch can be simplified by querying extensions and layers instead of just throwing errors
@@ -170,5 +207,19 @@ create_logical_device :: proc(physical_device: vk.PhysicalDevice) -> (device: vk
 		vk_fatal(result, "Failed to create logical device")
 	}
 	return device
+}
+
+get_queue_handles :: proc(
+	physical_device: vk.PhysicalDevice,
+	device: vk.Device,
+) -> (
+	queue_handles: []vk.Queue,
+) {
+	count, queues := query_queue_info(physical_device)
+	queue_handles = make([]vk.Queue, count)
+	for i in 0 ..< count {
+		vk.GetDeviceQueue(device, i, 0, &queue_handles[i])
+	}
+	return queue_handles
 }
 

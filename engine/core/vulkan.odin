@@ -98,6 +98,7 @@ when VALIDATION_LAYERS == true {
 		engine            = engine_info,
 		req_global_ext    = {"VK_KHR_surface", "VK_KHR_win32_surface", "VK_EXT_debug_utils"},
 		req_global_layers = {},
+		req_device_ext    = {"VK_KHR_swapchain"},
 	}
 } else {
 	app_info :: App_Info {
@@ -109,24 +110,26 @@ when VALIDATION_LAYERS == true {
 	}
 }
 
-vulkan_info: Vulkan_Info
+vk_info: Vulkan_Info
 
 @(private)
 init_vulkan :: proc(window: glfw.WindowHandle) {
 	vk_ctx.start_time = time.now() // TODO: Remove
-	vulkan_info.odin_ctx = context
-	vk_ctx.instance = create_instance(app_info) // TODO: Switch to vulkan info
-	vk.load_proc_addresses_instance(vk_ctx.instance)
+	vk_info.odin_ctx = context
+	vk_info.instance = create_instance(app_info)
+	vk.load_proc_addresses_instance(vk_info.instance)
 	when VALIDATION_LAYERS == true {
-		vk_ctx.debug_messenger = setup_validation(
-		vk_ctx.instance, // TODO: Switch to vulkan info
-		{.VERBOSE, .INFO, .WARNING, .ERROR},
-		{.GENERAL, .VALIDATION, .PERFORMANCE},
+		vk_info.debug_messenger = setup_validation(
+			vk_info.instance,
+			{.VERBOSE, .INFO, .WARNING, .ERROR},
+			{.GENERAL, .VALIDATION, .PERFORMANCE},
 		)
 	}
-	vk_ctx.physical_device = get_physical_device(vk_ctx.instance) // TODO: switch to vulkan info
-	vk_ctx.surface = create_surface(vk_ctx.instance, window) // TODO: Change to vulkan info
-	create_logical_device()
+	vk_info.physical_device = get_physical_device(vk_info.instance)
+	vk_info.surface = create_surface(vk_info.instance, window)
+	vk_info.logical_device = create_logical_device_2(vk_info.physical_device, app_info)
+	vk_info.queues = get_queue_handles(vk_info.physical_device, vk_info.logical_device)
+	/*
 	create_swapchain()
 	create_image_views()
 	create_render_pass()
@@ -139,6 +142,8 @@ init_vulkan :: proc(window: glfw.WindowHandle) {
 	// create_uniform_buffers()
 	create_command_buffer()
 	create_sync_objects()
+	*/
+	assert(false)
 }
 
 @(private)

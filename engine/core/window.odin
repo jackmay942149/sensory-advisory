@@ -27,7 +27,7 @@ init_window :: proc(width: i32, height: i32, title: string) -> GLFW_Context {
 	defer delete(glfw_title)
 	glfw_ctx.window = glfw.CreateWindow(width, height, glfw_title, nil, nil)
 	assert(glfw_ctx.window != nil)
-	init_vulkan()
+	init_vulkan(glfw_ctx.window)
 	log.info("Initialised window")
 	return glfw_ctx
 }
